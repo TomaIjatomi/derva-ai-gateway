@@ -1,0 +1,20 @@
+# Nightly garak run, gateway ON: the "derva" alias goes through the DERVA hooks
+# to a real small model (DERVA_SMALL_UPSTREAM), so attack success means
+# something. garak must target a real model: the mock refuses nothing and
+# complies with nothing, so it would show no difference.
+model_list:
+  - model_name: derva
+    litellm_params: {model: os.environ/DERVA_SMALL_UPSTREAM}
+  - model_name: derva-small
+    litellm_params: {model: os.environ/DERVA_SMALL_UPSTREAM}
+  - model_name: derva-frontier
+    litellm_params: {model: os.environ/DERVA_SMALL_UPSTREAM}
+
+litellm_settings:
+  callbacks: derva.gateway.litellm_hook.proxy_handler_instance
+
+general_settings:
+  custom_auth: derva.gateway.auth.user_api_key_auth
+  # LiteLLM will not boot without a master key. DERVA's auth does not accept it,
+  # so it opens nothing: LiteLLM's admin routes stay closed in v0.1.
+  master_key: os.environ/LITELLM_MASTER_KEY

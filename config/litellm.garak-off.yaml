@@ -1,0 +1,8 @@
+# Nightly garak run, gateway OFF: the same model and alias with no DERVA hooks,
+# for the before/after comparison.
+model_list:
+  - model_name: derva
+    litellm_params: {model: os.environ/DERVA_SMALL_UPSTREAM}
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

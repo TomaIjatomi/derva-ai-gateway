@@ -1,0 +1,88 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: derva_test
+          POSTGRES_PASSWORD: derva-test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DERVA_TEST_PG_ADMIN_URL: postgresql+psycopg://postgres:derva-test@localhost/derva_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv pip install --system -r requirements.lock -e ".[dev,evals]"
+          python -m spacy download en_core_web_sm
+      - name: Lint
+        run: |
+          ruff check src tests scripts
+          ruff format --check src tests scripts
+      - name: Type check
+        run: mypy src
+      - name: Tests, including Postgres audit tests
+        run: pytest -q
+      - name: Regression gate (rules decider vs committed baselines)
+        run: make gate BIN=
+      - name: Harness check through LiteLLM and the mock decider
+        run: |
+          derva mock-server &
+          for i in $(seq 1 30); do curl -sf localhost:8100/health && break; sleep 1; done
+          derva eval run golden --decider mock --split all --limit 10
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format
+        run: terraform fmt -check -recursive infra/terraform
+      - name: Validate staging
+        working-directory: infra/terraform/envs/staging
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  compose:
+    # The whole demo stack, built from the Dockerfile, checked end to end.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack
+        run: docker compose up --build --wait --wait-timeout 300
+      - name: Smoke test
+        run: |
+          pip install httpx
+          python scripts/smoke_test.py
+      - name: Audit chain verifies in Postgres
+        run: >
+          docker compose exec -T gateway derva audit verify
+          --url postgresql+psycopg://derva_app:derva-demo@postgres/derva
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color | tail -200
+      - name: Stop
+        if: always()
+        run: docker compose down -v
