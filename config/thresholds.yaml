@@ -1,0 +1,37 @@
+# Policy thresholds. These are STARTING VALUES, not tuned ones: the evaluation
+# runs (on the tuning split only, never the held-out split) set the real numbers.
+# Every audit event records this version, so any past decision can be replayed
+# against the rules that were live at the time.
+version: "2026-10-17.1"
+
+# Noul questions: probability that the statement is true.
+injection:
+  block_at: 0.8      # >= block_at: block
+  review_at: 0.4     # >= review_at and < block_at: hold for review
+exfiltration:
+  block_at: 0.8
+  review_at: 0.4
+
+# Choice questions use TypeSafe's confidence (0 = even split, 1 = certain).
+action:
+  min_confidence: 0.5   # below this the gateway does not act on its own
+
+advice:
+  # Personal financial advice going outside the firm needs a person.
+  regulated_advice_at: 0.5
+  customer_facing_at: 0.5
+
+route:
+  min_confidence: 0.6
+  # When the router is unsure, use the capable model: a wrong answer costs more
+  # than extra tokens.
+  default: frontier_model
+
+# Tool calls are judged by the tool's name, never by a model.
+tools:
+  effectful:
+    - send_email
+    - update_record
+  read_only:
+    - lookup_client
+    - read_inbox

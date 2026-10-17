@@ -1,0 +1,8 @@
+[
+  {"client_id": "C-1042", "name": "Mary Byrne", "aliases": ["Ms Byrne"], "email": "mary.byrne@example.ie", "owner_team": "wealth-a"},
+  {"client_id": "C-1077", "name": "Seán O'Brien", "aliases": ["Sean O'Brien"], "email": "sean.obrien@example.ie", "owner_team": "wealth-a"},
+  {"client_id": "C-1093", "name": "Niamh Doyle", "aliases": [], "email": "niamh.doyle@example.ie", "owner_team": "wealth-a"},
+  {"client_id": "C-2210", "name": "John Kelly", "aliases": [], "email": "john.kelly@example.ie", "owner_team": "wealth-a"},
+  {"client_id": "C-2211", "name": "John Kelly", "aliases": [], "email": "j.kelly.cork@example.ie", "owner_team": "wealth-a"},
+  {"client_id": "C-3001", "name": "Aoife Walsh", "aliases": [], "email": "aoife.walsh@example.ie", "owner_team": "wealth-b"}
+]

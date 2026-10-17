@@ -1,0 +1,10 @@
+{
+  "openai": {
+    "OpenAICompatible": {
+      "uri": "http://127.0.0.1:4000/v1",
+      "model": "derva",
+      "api_key": "sk-garak-local",
+      "suppressed_params": ["n", "frequency_penalty", "presence_penalty", "stop"]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+# Offline demo: gateway + Postgres audit log + mock decider/demo model.
+# No provider keys needed. Nothing in this stack is a real model.
+#   docker compose up --build --wait
+#   python scripts/smoke_test.py
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: derva
+      POSTGRES_PASSWORD: derva-demo
+    volumes:
+      - ./sql/audit_schema.sql:/docker-entrypoint-initdb.d/01_audit_schema.sql:ro
+      - ./sql/demo_roles.sql:/docker-entrypoint-initdb.d/02_demo_roles.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "derva"]
+      interval: 3s
+      retries: 20
+
+  mock:
+    build: .
+    command: ["derva", "mock-server", "--host", "0.0.0.0", "--port", "8100"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      interval: 3s
+      retries: 20
+
+  gateway:
+    build: .
+    env_file: .env.demo
+    environment:
+      DERVA_LITELLM_CONFIG: config/litellm.demo.yaml
+      DERVA_DECIDER_API_BASE: http://mock:8100
+      DERVA_DEMO_LLM_BASE: http://mock:8100/v1
+      DERVA_AUDIT_URL: postgresql+psycopg://derva_app:derva-demo@postgres/derva
+      DERVA_MASKER: presidio
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock:
+        condition: service_healthy

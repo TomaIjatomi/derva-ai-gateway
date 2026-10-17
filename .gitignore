@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local state
+*.db
+.env
+data/cache/
+
+# Evaluation output: mock runs check the harness and are never results.
+results/runs/*-mock-*/
+results/plots/scratch/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl.bak

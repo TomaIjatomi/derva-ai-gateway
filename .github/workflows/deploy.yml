@@ -1,0 +1,84 @@
+name: deploy-staging
+
+# After CI passes on main: build, migrate, deploy a canary with no traffic,
+# test it, then move traffic. A failed check leaves traffic where it was.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  PROJECT: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  IMAGE: ${{ vars.GCP_REGISTRY }}/gateway:${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    if: ${{ vars.GCP_PROJECT_ID != '' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Migrate the audit schema
+        run: |
+          gcloud run jobs update derva-migrate --image "$IMAGE" --region "$REGION"
+          gcloud run jobs execute derva-migrate --region "$REGION" --wait
+          gcloud run jobs update derva-audit-anchor --image "$IMAGE" --region "$REGION"
+
+      - name: Deploy canary with no traffic
+        run: |
+          gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --no-traffic --tag canary
+          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json \
+                | jq -r '.status.traffic[] | select(.tag=="canary") | .url')
+          echo "CANARY_URL=$url" >> "$GITHUB_ENV"
+
+      - id: token
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: id_token
+          id_token_audience: ${{ vars.CLOUD_RUN_SERVICE }}
+          id_token_include_email: true
+
+      - name: Smoke test the canary
+        run: |
+          pip install httpx
+          python scripts/smoke_test.py --base-url "$CANARY_URL" \
+            --key "${{ secrets.DERVA_SMOKE_KEY }}" --token "${{ steps.token.outputs.id_token }}"
+
+      - name: Load test the canary
+        run: |
+          python scripts/load_test.py --base-url "$CANARY_URL" \
+            --key "${{ secrets.DERVA_SMOKE_KEY }}" --token "${{ steps.token.outputs.id_token }}" \
+            --requests 60 --concurrency 6 --max-error-rate 0.02 --max-p95-ms 20000
+
+      - name: Move traffic to the canary
+        run: gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest

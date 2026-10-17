@@ -1,0 +1,18 @@
+[
+  {
+    "key_sha256": "c2d45fecbff204038fb860adb68cbece8acb36f57cfc01a16696378d0bd8100f",
+    "key_alias": "demo-wealth-a",
+    "owner": "toma@example.ie",
+    "teams": [
+      "wealth-a"
+    ]
+  },
+  {
+    "key_sha256": "b410d8807d67c55dcdecaecbc4d2d49941c0bcbaa3f4e360c18bd244a8e7084e",
+    "key_alias": "demo-wealth-b",
+    "owner": "colleague@example.ie",
+    "teams": [
+      "wealth-b"
+    ]
+  }
+]

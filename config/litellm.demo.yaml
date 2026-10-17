@@ -1,0 +1,29 @@
+# Offline demo config: no provider keys needed.
+# Both the tier models and the decision model are DERVA's mock server on port
+# 8100 (see .env.demo). Its replies are canned: nothing here is a real model.
+model_list:
+  - model_name: derva
+    litellm_params:
+      model: openai/demo-frontier
+      api_base: os.environ/DERVA_DEMO_LLM_BASE
+      api_key: demo
+  - model_name: derva-small
+    litellm_params:
+      model: openai/demo-small
+      api_base: os.environ/DERVA_DEMO_LLM_BASE
+      api_key: demo
+  - model_name: derva-frontier
+    litellm_params:
+      model: openai/demo-frontier
+      api_base: os.environ/DERVA_DEMO_LLM_BASE
+      api_key: demo
+
+litellm_settings:
+  callbacks: derva.gateway.litellm_hook.proxy_handler_instance
+
+general_settings:
+  # Demo keys: sk-derva-demo (team wealth-a) and sk-derva-demo-b (team wealth-b).
+  custom_auth: derva.gateway.auth.user_api_key_auth
+  # LiteLLM will not boot without a master key. DERVA's auth does not accept it,
+  # so it opens nothing: LiteLLM's admin routes stay closed in v0.1.
+  master_key: os.environ/LITELLM_MASTER_KEY

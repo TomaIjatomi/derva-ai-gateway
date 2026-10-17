@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: pip
+    directory: /
+    schedule: {interval: weekly}
+    ignore:
+      # LiteLLM is pinned on purpose: upgrade it by hand and rerun the smoke test.
+      - dependency-name: litellm

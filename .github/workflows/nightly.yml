@@ -1,0 +1,105 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  garak:
+    # Same model scanned through the gateway and around it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: ${{ vars.DERVA_SMALL_UPSTREAM != '' }}
+    env:
+      DERVA_SMALL_UPSTREAM: ${{ vars.DERVA_SMALL_UPSTREAM }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LITELLM_MASTER_KEY: sk-garak-local
+      DERVA_MASKER: regex
+      DERVA_AUDIT_URL: sqlite:///garak_audit.db
+      # garak's key (garak/generator.json), allowed for team wealth-a.
+      DERVA_CALLERS: '[{"key_sha256": "0b2f735b237116d629628cf58861ef834642c62f59fe916b664962c8bb42f25e", "key_alias": "garak", "owner": "nightly@ci", "teams": ["wealth-a"]}]'
+      # Decision model if configured; otherwise the chain falls back to rules.
+      DERVA_DECIDER_MODEL: ${{ vars.DERVA_DECIDER_MODEL }}
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv pip install --system -r requirements.lock -e . garak
+      - name: Scan with the gateway off, then on
+        run: |
+          for mode in off on; do
+            config=config/litellm.garak.yaml; [ "$mode" = off ] && config=config/litellm.garak-off.yaml
+            litellm --config "$config" --port 4000 > "litellm-$mode.log" 2>&1 &
+            pid=$!
+            for i in $(seq 1 60); do curl -sf localhost:4000/health/liveliness && break; sleep 2; done
+            python -m garak --model_type openai.OpenAICompatible --model_name derva \
+              --generator_option_file garak/generator.json --generations 1 \
+              --probes promptinject,dan.Dan_11_0,latentinjection,encoding.InjectBase64 \
+              --report_prefix "gateway-$mode"
+            kill $pid; sleep 2
+          done
+      - name: Summarise
+        run: |
+          on=$(find ~ -name 'gateway-on*.report.jsonl' | head -1)
+          off=$(find ~ -name 'gateway-off*.report.jsonl' | head -1)
+          python scripts/garak_summary.py --on "$on" --off "$off" --out results/garak | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garak-${{ github.run_id }}
+          path: |
+            results/garak/
+            ~/.local/share/garak/garak_runs/
+            litellm-*.log
+
+  evals:
+    # Real deciders on the held-out splits, when their keys are configured.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        decider: [jev, clef, llm]
+    env:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DERVA_JEV_MODEL: ${{ vars.DERVA_JEV_MODEL }}
+      DERVA_CLEF_MODEL: ${{ vars.DERVA_CLEF_MODEL }}
+      DERVA_EVAL_LLM: ${{ vars.DERVA_EVAL_LLM }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip when this decider has no key
+        id: keys
+        run: |
+          case "${{ matrix.decider }}" in
+            jev) key="$TYPESAFE_API_KEY" ;; clef) key="$CLOUDFLARE_API_KEY" ;; llm) key="$ANTHROPIC_API_KEY$DERVA_EVAL_LLM" ;;
+          esac
+          [ -n "$key" ] && echo "run=true" >> "$GITHUB_OUTPUT" || echo "No key for ${{ matrix.decider }}; skipping."
+      - uses: astral-sh/setup-uv@v5
+        if: steps.keys.outputs.run == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.keys.outputs.run == 'true'
+        with:
+          python-version: "3.12"
+      - name: Run held-out evaluations
+        if: steps.keys.outputs.run == 'true'
+        run: |
+          uv pip install --system -r requirements.lock -e ".[evals]"
+          for task in injection golden banking77; do
+            derva eval run $task --decider ${{ matrix.decider }} --split heldout --cache .eval-cache.db
+          done
+          derva eval report | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.keys.outputs.run == 'true'
+        with:
+          name: evals-${{ matrix.decider }}-${{ github.run_id }}
+          path: results/
