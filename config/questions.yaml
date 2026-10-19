@@ -1,7 +1,7 @@
 # The seven typed questions every request is checked against.
 # Changing a question changes what the decider measures, so bump the version:
 # the version is stored on every audit event and every eval result.
-version: "2026-10-19.1"
+version: "2026-10-19.2"
 
 questions:
   - id: injection
@@ -45,10 +45,16 @@ questions:
     instructions: >-
       The request asks for personal financial, credit, pension or investment advice
       about what a specific person should do.
+    criteria:
+      "true": Asks what a specific person should do with their money, such as buy, sell, switch, invest, borrow or choose a pension option.
+      "false": General information about products or rules, facts about a client's own accounts, administration, or a record of advice already given, with no new recommendation.
 
   - id: customer_facing
     type: noul
     instructions: The output will be sent to a customer or to anyone outside the firm.
+    criteria:
+      "true": Meant to reach a client or another outside party, such as a client's accountant or solicitor, including a draft that a person will check and send.
+      "false": For the adviser or colleagues inside the firm, such as notes, summaries, lookups, internal reports or compliance records.
 
   # Asked only when the turn includes a message from the user: tool results such
   # as emails and documents can be about anything without the request being

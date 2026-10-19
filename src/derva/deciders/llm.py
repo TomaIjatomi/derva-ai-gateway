@@ -36,6 +36,11 @@ def _describe(questions: QuestionSet) -> str:
     for q in questions.questions:
         if q.type is QuestionType.NOUL:
             lines.append(f'- id "{q.id}" (options: "yes", "no"): is this true? {q.instructions}')
+            # Same definitions the decision model gets, so the comparison is fair.
+            if isinstance(q.criteria, dict):
+                for option, key in (("yes", "true"), ("no", "false")):
+                    if q.criteria.get(key):
+                        lines.append(f'    "{option}": {q.criteria[key]}')
             continue
         lines.append(f'- id "{q.id}": {q.instructions} Options:')
         if q.type is QuestionType.CHOICE:

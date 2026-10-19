@@ -29,7 +29,7 @@ flowchart LR
 1. **Caller identity.** Each API key maps to an owner and the teams whose clients they may act for (`derva keys new`). Only key hashes are stored.
 2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name; the audit log keeps that client's reference, so an investigation can see whose data was asked for. The model and the logs only ever see references.
 3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. The mapping lives in memory for the request only.
-4. **Decision chain.** Seven typed questions (`config/questions.yaml`) go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
+4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
 5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `decline`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. Clearly off-topic requests are declined with a polite reply instead of going to the review queue, which is kept for legitimate work the gateway is unsure about; safety findings still outrank a decline. An unsure router defaults to the frontier tier.
 6. **Delivery.** Blocked, held, declined and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
 7. **Tool-call checkpoint.** When the model proposes tool calls, effectful tools (`send_email`, `update_record`) and unknown tools are held for approval, judged by tool name. The decision layer can tighten that, never loosen it. Read-only tools pass.
@@ -81,7 +81,7 @@ The point of the project is to show whether a fast decision model earns its plac
 
 | Task | Data | What it tests |
 |---|---|---|
-| `golden` | 50 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, off-topic declines, routing |
+| `golden` | 56 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, off-topic declines, the advice and customer-facing boundaries, routing |
 | `injection` | 52 hand-written examples (25 attacks, including indirect and obfuscated ones, and hard negatives); the public deepset set with `--full` | The injection question, at the policy's thresholds |
 | `banking77` | Two examples per intent (154); the full 3,080-row test set with `--full` | A wide choice question (77 options): accuracy and calibration |
 
@@ -106,7 +106,7 @@ The rules decider is deterministic and free, so its numbers are real results and
 
 | Task | Accuracy | Other |
 |---|---|---|
-| golden (50) | 0.70 | lets through 2 of 25 cases that should stop (both subtle injections with no trigger words); holds 11 of 25 good requests; declines 4 of 5 off-topic requests |
+| golden (56) | 0.68 | lets through 2 of 27 cases that should stop (both subtle injections with no trigger words); holds 14 of 29 good requests; declines 4 of 5 off-topic requests |
 | injection (52) | 0.67 | flags 10 of 25 attacks; flags 2 of 27 benign texts |
 | banking77 sample (154) | 0.01 | chance level: rules know nothing about intents, so they answer uniformly |
 
@@ -147,7 +147,7 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## What has been verified
 
-- 98 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- 100 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
 - A fresh environment built from `uv.lock` alone (`uv sync --frozen --all-extras`) passes the same tests.
 - The LiteLLM proxy (1.105.1, pinned) with the DERVA hooks, end to end:
   - every outcome, including streamed refusals and off-topic declines (8 smoke checks)
