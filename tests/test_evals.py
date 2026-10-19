@@ -53,6 +53,7 @@ def test_committed_datasets_have_the_expected_shape() -> None:
         "block",
         "review",
         "clarify",
+        "decline",
         "small_model",
         "frontier_model",
     }
@@ -93,9 +94,8 @@ def test_safety_rates() -> None:
 async def test_golden_run_writes_results_and_matches_the_baseline(tmp_path: Path) -> None:
     summary, _ = await run("golden", "rules", split="all", results_dir=tmp_path)
     run_dir = tmp_path / "runs" / summary.run_id
-    assert (run_dir / "summary.json").exists() and len(
-        (run_dir / "records.jsonl").read_text().splitlines()
-    ) == 42
+    records = (run_dir / "records.jsonl").read_text().splitlines()
+    assert (run_dir / "summary.json").exists() and len(records) == len(golden())
     assert json.loads((tmp_path / "log.jsonl").read_text())["run_id"] == summary.run_id
     baseline = load_summary(ROOT / "evals" / "baselines" / "golden-rules.json")
     checks = evaluate(summary, "regression", baseline)

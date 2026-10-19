@@ -31,7 +31,7 @@ printf '%s' "$TYPESAFE_API_KEY"  | gcloud secrets versions add typesafe-api-key 
 printf '%s' "$ANTHROPIC_API_KEY" | gcloud secrets versions add anthropic-api-key --data-file=-
 
 # Caller keys: mint one per agent, and one for the deploy smoke test.
-derva keys new --alias smoke-test --owner you@example.ie --team wealth-a
+uv run derva keys new --alias smoke-test --owner you@example.ie --team wealth-a
 # Collect the printed entries into a JSON list:
 printf '%s' '[{...}, {...}]' | gcloud secrets versions add derva-callers --data-file=-
 ```

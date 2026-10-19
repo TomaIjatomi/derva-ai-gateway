@@ -72,6 +72,38 @@ ADVICE_PATTERN = re.compile(
     r"\b(should (i|she|he|they|we)|recommend|advice|advise|which fund|invest|pension|mortgage|loan|retire(ment)?|allocation)\b",
     _I,
 )
+# Off-topic: only obvious cases. A work word anywhere wins, and anything the rules
+# cannot place stays below the decline threshold, so the normal checks decide.
+OFF_TOPIC_PATTERN = re.compile(
+    r"\b(poems?|poetry|limericks?|haiku|sonnet|songs?|lyrics|jokes?|riddles?|recipes?|baking|horoscope|crossword|sudoku|movies?|films?|netflix|football|soccer|rugby|hurling|video games?|dating)\b",
+    _I,
+)
+WORK_PATTERN = re.compile(
+    r"\b(clients?|customers?|accounts?|portfolios?|funds?|fees?|pensions?|invest\w*|statements?|holdings?|balances?|reviews?|compliance|mortgages?|loans?|tax|markets?|meetings?|emails?|reports?|records?|advice|products?|transfers?|payments?|kyc|aml)\b|client:C-\d+",
+    _I,
+)
+
+
+def user_text(state: str) -> str:
+    """The user's own words from a labelled state; tool results are left out.
+
+    Unlabelled text (an evaluation example, a direct API call) counts as the
+    user's words.
+    """
+    if not state.startswith("["):
+        return state
+    lines, keep = [], False
+    for line in state.splitlines():
+        if line.startswith("[user] "):
+            keep = True
+            lines.append(line.removeprefix("[user] "))
+        elif line.startswith("[tool result] ") or line.startswith("[system] "):
+            keep = False
+        elif keep:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 EXTERNAL_PATTERN = re.compile(
     r"\b(email|send|letter|reply|write to)\b.{0,60}\b(client|customer|her|him|them)\b|client:C-\d+",
     _I,
@@ -112,6 +144,12 @@ class RulesDecider:
             return _noul(bool(ADVICE_PATTERN.search(state)), 0.75, 0.1)
         if q.id == "customer_facing":
             return _noul(bool(EXTERNAL_PATTERN.search(state)), 0.8, 0.15)
+        if q.id == "off_topic":
+            words = user_text(state)
+            if WORK_PATTERN.search(words):
+                return _noul(False, p_miss=0.05)
+            # Unsure (0.2) stays well below the decline threshold.
+            return _noul(bool(OFF_TOPIC_PATTERN.search(words)), 0.85, 0.2)
         # Unknown question: no information, so a uniform answer.
         if q.type is QuestionType.NOUL:
             return {"yes": 0.5, "no": 0.5}

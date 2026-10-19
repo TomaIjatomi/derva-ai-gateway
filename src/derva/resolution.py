@@ -84,8 +84,11 @@ class ResolutionResult(BaseModel):
     references: list[str] = Field(default_factory=list)
     # Matched name -> candidate references the caller may act for.
     ambiguous: dict[str, list[str]] = Field(default_factory=dict)
-    # Count only: the names themselves are never echoed back or logged.
+    # The names are never echoed back or logged. The references of out-of-scope
+    # clients are kept for the audit log, so an investigation can see whose data
+    # a refused request was after.
     denied_count: int = 0
+    denied: list[str] = Field(default_factory=list)
 
 
 def resolve_clients(text: str, caller: Caller, directory: ClientDirectory) -> ResolutionResult:
@@ -106,6 +109,7 @@ def resolve_clients(text: str, caller: Caller, directory: ClientDirectory) -> Re
     references: list[str] = []
     ambiguous: dict[str, list[str]] = {}
     denied = 0
+    denied_refs: list[str] = []
 
     def _replace(match: re.Match[str]) -> str:
         nonlocal denied
@@ -119,6 +123,7 @@ def resolve_clients(text: str, caller: Caller, directory: ClientDirectory) -> Re
             ambiguous[match.group(0)] = sorted(reference(r.client_id) for r in allowed)
             return match.group(0)
         denied += 1
+        denied_refs.extend(reference(r.client_id) for r in candidates)
         return match.group(0)
 
     resolved = pattern.sub(_replace, text)
@@ -134,4 +139,5 @@ def resolve_clients(text: str, caller: Caller, directory: ClientDirectory) -> Re
         references=sorted(set(references)),
         ambiguous=ambiguous,
         denied_count=denied,
+        denied=sorted(set(denied_refs)),
     )

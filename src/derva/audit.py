@@ -55,6 +55,7 @@ class EventType(StrEnum):
     ROUTED = "routed"
     BLOCKED = "blocked"
     HELD = "held"
+    DECLINED = "declined"
     CLARIFY = "clarify"
     TOOL_PROPOSED = "tool_proposed"
     APPROVAL_REQUESTED = "approval_requested"

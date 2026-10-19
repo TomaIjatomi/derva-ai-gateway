@@ -17,6 +17,7 @@ def result(questions: QuestionSet, **probs: dict[str, float]) -> DecisionResult:
         "route": {"small_model": 0.9},
         "regulated_advice": {"yes": 0.05},
         "customer_facing": {"yes": 0.05},
+        "off_topic": {"yes": 0.05},
     }
     defaults.update(probs)
     answers = {}
@@ -131,3 +132,41 @@ def test_decider_can_only_tighten_tool_policy(
         "lookup_client", result(questions, exfiltration={"yes": 0.95}), thresholds
     )
     assert decision.outcome is Outcome.BLOCK
+
+
+def test_off_topic_request_is_declined_not_reviewed(
+    questions: QuestionSet, thresholds: Thresholds
+) -> None:
+    # An unclear action would normally hold the request; off-topic wins over that.
+    decision = evaluate_request(
+        result(questions, off_topic={"yes": 0.9}, action={"answer_only": 0.3}), thresholds
+    )
+    assert decision.outcome is Outcome.DECLINE
+    assert decision.rule == "off_topic"
+    assert decision.route is None
+
+
+def test_safety_findings_outrank_a_decline(questions: QuestionSet, thresholds: Thresholds) -> None:
+    blocked = evaluate_request(
+        result(questions, off_topic={"yes": 0.9}, injection={"yes": 0.95}), thresholds
+    )
+    held = evaluate_request(
+        result(questions, off_topic={"yes": 0.9}, exfiltration={"yes": 0.5}), thresholds
+    )
+    assert blocked.outcome is Outcome.BLOCK
+    assert held.outcome is Outcome.REVIEW
+
+
+def test_unsure_off_topic_answer_follows_the_normal_rules(
+    questions: QuestionSet, thresholds: Thresholds
+) -> None:
+    decision = evaluate_request(result(questions, off_topic={"yes": 0.6}), thresholds)
+    assert decision.outcome is Outcome.SMALL_MODEL
+
+
+def test_missing_off_topic_answer_is_not_a_finding(
+    questions: QuestionSet, thresholds: Thresholds
+) -> None:
+    without = questions.subset([q.id for q in questions.questions if q.id != "off_topic"])
+    decision = evaluate_request(result(without), thresholds)
+    assert decision.outcome is Outcome.SMALL_MODEL

@@ -28,6 +28,7 @@ from derva.deciders.chain import AllDecidersFailed
 from derva.masking import Masker
 from derva.policy import (
     TOOL_CALL_QUESTIONS,
+    USER_TURN_QUESTIONS,
     Outcome,
     PolicyDecision,
     evaluate_request,
@@ -70,8 +71,8 @@ def _text(content: Any) -> str:
     return "" if content is None else json.dumps(content)
 
 
-def incoming_state(messages: list[dict[str, Any]]) -> str:
-    """Everything that arrived since the model last spoke: user turns and tool results."""
+def _incoming(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The messages that arrived since the model last spoke, oldest first."""
     since: list[dict[str, Any]] = []
     for message in reversed(messages):
         if message.get("role") == "assistant":
@@ -79,8 +80,18 @@ def incoming_state(messages: list[dict[str, Any]]) -> str:
         since.append(message)
     if not since and messages:
         since = [messages[-1]]
+    return list(reversed(since))
+
+
+def has_user_turn(messages: list[dict[str, Any]]) -> bool:
+    """Whether the incoming turn includes a message from the user, not only tool results."""
+    return any(m.get("role", "user") == "user" for m in _incoming(messages))
+
+
+def incoming_state(messages: list[dict[str, Any]]) -> str:
+    """Everything that arrived since the model last spoke: user turns and tool results."""
     parts = []
-    for message in reversed(since):
+    for message in _incoming(messages):
         role = message.get("role", "user")
         if role == "system":
             continue
@@ -161,6 +172,7 @@ class Pipeline:
                     {ref for refs in resolution.ambiguous.values() for ref in refs}
                 ),
                 "denied_count": resolution.denied_count,
+                "denied_references": resolution.denied,
             },
         )
         reply: str | None
@@ -180,14 +192,22 @@ class Pipeline:
             return PipelineResult(request_id=rid, outcome=Outcome.CLARIFY, reply=reply)
 
         masked = self.masker.mask(resolution.text)
-        decision, failures = await self._decide(masked.text, self.questions)
+        questions = self.questions
+        if not has_user_turn(request.messages):
+            # A turn of tool results only: the user's request was judged when it
+            # arrived, and an email or document can be about anything.
+            questions = questions.subset(
+                [q.id for q in questions.questions if q.id not in USER_TURN_QUESTIONS]
+            )
+        decision, failures = await self._decide(masked.text, questions)
         policy = evaluate_request(decision, self.thresholds)
         self.audit.append(
             rid,
             EventType.DECIDED,
             "gateway",
             {
-                "questions_version": self.questions.version,
+                "questions_version": questions.version,
+                "questions": [q.id for q in questions.questions],
                 "thresholds_version": policy.thresholds_version,
                 "decider": decision.decider if decision else None,
                 "model": decision.model if decision else None,
@@ -210,6 +230,14 @@ class Pipeline:
                 f"to a model. Request id: {rid}"
             )
             self.audit.append(rid, EventType.BLOCKED, "gateway", {"rule": policy.rule})
+        elif policy.outcome is Outcome.DECLINE:
+            reply = (
+                "This assistant handles wealth-desk work: clients, accounts, portfolios, fees, "
+                "financial products and compliance. That request looks outside it, so it was "
+                "not sent to a model. If it is work-related, rephrase it with more detail. "
+                f"Request id: {rid}"
+            )
+            self.audit.append(rid, EventType.DECLINED, "gateway", {"rule": policy.rule})
         elif policy.outcome is Outcome.REVIEW:
             reply = (
                 "This request is held for review by a person before it can go ahead. "

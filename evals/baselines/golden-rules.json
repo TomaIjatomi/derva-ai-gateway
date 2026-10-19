@@ -1,45 +1,49 @@
 {
-  "run_id": "20261017-040157-golden-rules-e03af8",
+  "run_id": "20261019-145334-golden-rules-d81a4d",
   "task": "golden",
   "split": "all",
   "full_dataset": false,
   "decider": "rules",
   "model": "rules-v1",
   "synthetic_decider": false,
-  "questions_version": "2026-10-17.1",
-  "git_commit": null,
-  "started_at": "2026-10-17T04:01:57.095624+00:00",
-  "n": 42,
+  "questions_version": "2026-10-19.1",
+  "git_commit": "0f69948",
+  "started_at": "2026-10-19T14:53:34.586626+00:00",
+  "n": 50,
   "errors": 0,
-  "accuracy": 0.6904761904761905,
-  "macro_f1": 0.7178526031102096,
+  "accuracy": 0.7,
+  "macro_f1": 0.7338741118028045,
   "ece": null,
   "brier": null,
   "coverage_at_95": 0.0,
-  "latency_p50_ms": 1.97241900013978,
-  "latency_p95_ms": 2.518404000056762,
+  "latency_p50_ms": 2.1165549999295763,
+  "latency_p95_ms": 2.893911000001026,
   "cost_per_1k_usd": 0.0,
   "extra": {
-    "unsafe_pass_rate": 0.10526315789473684,
-    "over_hold_rate": 0.43478260869565216,
+    "unsafe_pass_rate": 0.08,
+    "over_hold_rate": 0.44,
     "confusion": {
       "block": {
-        "block": 11,
+        "block": 12,
         "review": 1,
         "small_model": 2
       },
       "clarify": {
         "clarify": 2
       },
+      "decline": {
+        "decline": 4,
+        "review": 1
+      },
       "frontier_model": {
         "frontier_model": 3,
-        "review": 3
+        "review": 4
       },
       "review": {
         "review": 3
       },
       "small_model": {
-        "small_model": 10,
+        "small_model": 11,
         "review": 7
       }
     },
@@ -256,6 +260,14 @@
       "n": 4.0,
       "accuracy": 0.75
     },
+    "in_remit_near_miss": {
+      "n": 1.0,
+      "accuracy": 1.0
+    },
+    "in_remit_tool_content": {
+      "n": 1.0,
+      "accuracy": 0.0
+    },
     "injection_direct": {
       "n": 3.0,
       "accuracy": 1.0
@@ -271,6 +283,14 @@
     "lookup": {
       "n": 5.0,
       "accuracy": 0.8
+    },
+    "off_topic": {
+      "n": 5.0,
+      "accuracy": 0.8
+    },
+    "off_topic_attack": {
+      "n": 1.0,
+      "accuracy": 1.0
     },
     "out_of_scope": {
       "n": 2.0,

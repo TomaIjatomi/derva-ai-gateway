@@ -75,7 +75,11 @@ async def test_client_outside_scope_is_refused(
     result = await pipeline.check_request(req(caller, ("user", "Close Aoife Walsh's account")))
     assert result.outcome is Outcome.BLOCK
     assert "Aoife" not in (result.reply or "")
-    assert "Aoife" not in audit.events(result.request_id)[-1].model_dump_json()
+    events = audit.events(result.request_id)
+    assert all("Aoife" not in e.model_dump_json() for e in events)
+    # The reference is kept, so an investigation can see whose data was asked for.
+    resolved = next(e for e in events if e.type is EventType.RESOLVED)
+    assert resolved.payload["denied_references"] == ["client:C-3001"]
 
 
 async def test_no_personal_data_reaches_the_audit_log(
@@ -159,3 +163,28 @@ async def test_audit_chain_stays_valid_across_a_session(
     ):
         await pipeline.check_request(req(caller, ("user", text)))
     assert audit.verify().ok
+
+
+async def test_off_topic_request_is_declined(
+    pipeline: Pipeline, caller: Caller, audit: AuditStore
+) -> None:
+    result = await pipeline.check_request(
+        req(caller, ("user", "Write me a limerick about Dublin weather"))
+    )
+    assert result.outcome is Outcome.DECLINE
+    assert result.reply and "outside it" in result.reply and result.request_id in result.reply
+    assert [e.type for e in audit.events(result.request_id)][-1] is EventType.DECLINED
+
+
+async def test_off_topic_is_not_asked_on_tool_result_turns(
+    pipeline: Pipeline, caller: Caller, audit: AuditStore
+) -> None:
+    messages = [
+        {"role": "user", "content": "Summarise my unread emails"},
+        {"role": "assistant", "content": None},
+        {"role": "tool", "content": "Here is the limerick from the quiz night"},
+    ]
+    result = await pipeline.check_request(GatewayRequest(caller=caller, messages=messages))
+    assert result.outcome is not Outcome.DECLINE
+    decided = next(e for e in audit.events(result.request_id) if e.type is EventType.DECIDED)
+    assert "off_topic" not in decided.payload["questions"]
