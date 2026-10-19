@@ -43,6 +43,13 @@ class Question(BaseModel):
             not isinstance(self.criteria, list) or not 2 <= len(self.criteria) <= 10
         ):
             raise ValueError(f"score question {self.id!r} needs 2 to 10 levels")
+        # A misspelt key ("yes" for "true") would otherwise be silently dropped.
+        if (
+            self.type is QuestionType.NOUL
+            and self.criteria is not None
+            and (not isinstance(self.criteria, dict) or not set(self.criteria) <= {"true", "false"})
+        ):
+            raise ValueError(f'noul question {self.id!r} criteria keys must be "true"/"false"')
         return self
 
     @property

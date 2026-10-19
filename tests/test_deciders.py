@@ -178,6 +178,25 @@ async def test_llm_decider_rejects_invented_options(questions: QuestionSet) -> N
         await decider.decide("x", questions)
 
 
+def test_every_yes_no_question_defines_both_answers_and_the_llm_sees_them(
+    questions: QuestionSet,
+) -> None:
+    from derva.deciders.llm import _describe
+
+    prompt = _describe(questions)
+    for q in questions.questions:
+        if q.type is QuestionType.NOUL:
+            assert isinstance(q.criteria, dict)
+            assert q.criteria.get("true") and q.criteria.get("false")
+            assert f'"yes": {q.criteria["true"]}' in prompt
+            assert f'"no": {q.criteria["false"]}' in prompt
+
+
+def test_yes_no_criteria_keys_are_checked() -> None:
+    with pytest.raises(ValueError, match="true"):
+        Question(id="x", type=QuestionType.NOUL, instructions="x", criteria={"yes": "a"})
+
+
 def test_rules_judge_off_topic_on_the_users_words_only() -> None:
     from derva.deciders.rules import user_text
 
