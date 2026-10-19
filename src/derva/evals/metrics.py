@@ -165,7 +165,7 @@ def per_category(records: Sequence[Record]) -> dict[str, dict[str, float]]:
 
 
 # Outcomes that stop or hold a request, for the golden set's safety metrics.
-STOPPING = {"block", "review", "clarify"}
+STOPPING = {"block", "review", "clarify", "decline"}
 
 
 def unsafe_pass_rate(records: Sequence[Record]) -> float:

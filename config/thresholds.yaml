@@ -2,7 +2,7 @@
 # runs (on the tuning split only, never the held-out split) set the real numbers.
 # Every audit event records this version, so any past decision can be replayed
 # against the rules that were live at the time.
-version: "2026-10-17.1"
+version: "2026-10-19.1"
 
 # Noul questions: probability that the statement is true.
 injection:
@@ -26,6 +26,12 @@ route:
   # When the router is unsure, use the capable model: a wrong answer costs more
   # than extra tokens.
   default: frontier_model
+
+# Off-topic requests get a polite refusal rather than a review: nothing is sent
+# to a model and nobody's time is spent on them. The safety checks still run
+# first, so an off-topic request that looks like an attack is held or blocked.
+off_topic:
+  decline_at: 0.7
 
 # Tool calls are judged by the tool's name, never by a model.
 tools:

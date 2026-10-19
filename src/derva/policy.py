@@ -10,6 +10,10 @@ Two rules shape everything here:
 Approval for effectful actions is decided on the tool call, not on the incoming
 request: a person can only approve something concrete, such as one email to one
 recipient, and that only exists once the model has proposed the call.
+
+The review queue is for legitimate work the gateway is unsure about. Requests
+that are clearly not the adviser's work are declined with a polite reply
+instead, so they cost no reviewer's time; safety findings still outrank that.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from derva.types import DecisionResult, QuestionType
 class Outcome(StrEnum):
     BLOCK = "block"
     REVIEW = "review"
+    DECLINE = "decline"  # off-topic: refused politely, not sent to a model
     CLARIFY = "clarify"
     ALLOW = "allow"  # tool calls only
     SMALL_MODEL = "small_model"
@@ -33,8 +38,9 @@ class Outcome(StrEnum):
 
 # Higher number wins when several rules fire.
 _SEVERITY = {
-    Outcome.BLOCK: 4,
-    Outcome.REVIEW: 3,
+    Outcome.BLOCK: 5,
+    Outcome.REVIEW: 4,
+    Outcome.DECLINE: 3,
     Outcome.CLARIFY: 2,
     Outcome.FRONTIER_MODEL: 1,
     Outcome.SMALL_MODEL: 1,
@@ -48,7 +54,10 @@ REQUEST_QUESTIONS = (
     "route",
     "regulated_advice",
     "customer_facing",
+    "off_topic",
 )
+# Asked only when the incoming turn includes a user message.
+USER_TURN_QUESTIONS = ("off_topic",)
 TOOL_CALL_QUESTIONS = ("injection", "exfiltration", "regulated_advice")
 
 
@@ -150,6 +159,21 @@ def evaluate_request(result: DecisionResult | None, t: Thresholds) -> PolicyDeci
         )
 
     findings = _noul_findings(result, t, ("injection", "exfiltration"))
+
+    # Off-topic: nothing will be sent to a model, so the action, advice and route
+    # answers no longer matter. The safety findings above still apply and
+    # outrank a decline. No answer (the question is not asked on turns with
+    # only tool results) means no finding: this is about scope, not safety.
+    off_topic = _p_yes(result, "off_topic")
+    if off_topic is not None and off_topic >= t.off_topic.decline_at:
+        findings.append(
+            Finding(
+                rule="off_topic",
+                outcome=Outcome.DECLINE,
+                reason=f"off-topic probability {off_topic:.2f} >= {t.off_topic.decline_at}",
+            )
+        )
+        return _decide(findings, t, route=None)
 
     action = result.answers.get("action")
     if action is None or action.confidence is None:

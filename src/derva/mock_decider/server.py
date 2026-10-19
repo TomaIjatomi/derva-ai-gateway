@@ -195,7 +195,15 @@ def create_app(recordings: Path | None = None) -> FastAPI:
         else None
     )
     recorded: dict[str, Any] = json.loads(path.read_text()) if path and path.exists() else {}
-    known = {"injection", "exfiltration", "action", "route", "regulated_advice", "customer_facing"}
+    known = {
+        "injection",
+        "exfiltration",
+        "action",
+        "route",
+        "regulated_advice",
+        "customer_facing",
+        "off_topic",
+    }
 
     @app.get("/health")
     async def health() -> dict[str, str]:

@@ -95,6 +95,15 @@ async def test_blocked_request_becomes_an_ordinary_reply(guard: DervaGuard) -> N
     assert "rid-1" in caught.value.message
 
 
+async def test_off_topic_request_becomes_a_polite_reply(guard: DervaGuard) -> None:
+    with pytest.raises(GatewayReply) as caught:
+        await guard.async_pre_call_hook(
+            KEY, None, chat("Tell me a joke", litellm_call_id="rid-3"), "acompletion"
+        )
+    assert caught.value.status_code == 200
+    assert "outside it" in caught.value.message and "rid-3" in caught.value.message
+
+
 async def test_streamed_tool_requests_are_refused(guard: DervaGuard) -> None:
     data = chat(
         "Look up Mary Byrne", stream=True, tools=[{"type": "function", "function": {"name": "x"}}]

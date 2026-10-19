@@ -160,6 +160,7 @@ async def test_llm_decider_parses_typed_json(questions: QuestionSet) -> None:
         "route": {"small_model": 0.9, "frontier_model": 0.1},
         "regulated_advice": 0.05,
         "customer_facing": {"yes": 0.1, "no": 0.9},
+        "off_topic": 0.03,
     }
     decider = LLMDecider(
         model="gpt-4o-mini", mock_response="```json\n" + json.dumps(reply) + "\n```"
@@ -175,3 +176,22 @@ async def test_llm_decider_rejects_invented_options(questions: QuestionSet) -> N
     decider = LLMDecider(model="gpt-4o-mini", mock_response=bad)
     with pytest.raises(DeciderError):
         await decider.decide("x", questions)
+
+
+def test_rules_judge_off_topic_on_the_users_words_only() -> None:
+    from derva.deciders.rules import user_text
+
+    state = "[user] Summarise my unread emails\n[tool result] a limerick about Cork\nmore lines"
+    assert user_text(state) == "Summarise my unread emails"
+    assert user_text("Tell me a joke") == "Tell me a joke"
+
+
+async def test_rules_decline_only_obvious_off_topic(questions: QuestionSet) -> None:
+    rules = RulesDecider()
+    ask = questions.subset(["off_topic"])
+    joke = await rules.decide("[user] Tell me a joke", ask)
+    client_joke = await rules.decide("[user] Tell client:C-1042 a joke about fees", ask)
+    unsure = await rules.decide("[user] Can you plan my weekend in Galway?", ask)
+    assert joke.answers["off_topic"].p_yes >= 0.7
+    assert client_joke.answers["off_topic"].p_yes < 0.5
+    assert unsure.answers["off_topic"].p_yes < 0.7

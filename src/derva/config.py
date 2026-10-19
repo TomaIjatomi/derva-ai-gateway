@@ -39,6 +39,10 @@ class AdviceThreshold(BaseModel):
     customer_facing_at: float = Field(ge=0, le=1)
 
 
+class OffTopicThreshold(BaseModel):
+    decline_at: float = Field(ge=0, le=1)
+
+
 class RouteThreshold(BaseModel):
     min_confidence: float = Field(ge=0, le=1)
     default: RouteTier = "frontier_model"
@@ -63,6 +67,7 @@ class Thresholds(BaseModel):
     action: ActionThreshold
     advice: AdviceThreshold
     route: RouteThreshold
+    off_topic: OffTopicThreshold
     tools: ToolPolicy
 
 

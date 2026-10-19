@@ -3,7 +3,8 @@ name = "derva"
 version = "0.1.0"
 description = "DERVA (Decide, Evaluate, Route, Verify, Authorize): an AI gateway with a fast decision layer and maker-checker controls for regulated teams."
 readme = "README.md"
-requires-python = ">=3.12"
+# One Python version everywhere (laptop, CI, container) keeps the lock simple.
+requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 authors = [{ name = "Toma Ijatomi" }]
 dependencies = [
@@ -20,16 +21,22 @@ dependencies = [
 presidio = [
     "presidio-analyzer>=2.2",
     "presidio-anonymizer>=2.2",
+    # The small English model, pinned so `uv sync` installs it (spaCy's own
+    # download command needs pip, which uv environments do not have). The
+    # container image adds the large model on top.
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 ]
 postgres = ["psycopg[binary]>=3.2"]
 # Pinned: the hooks rely on this version's proxy behaviour (see gateway/litellm_hook.py).
 gateway = ["litellm[proxy]==1.105.1"]
 evals = ["matplotlib>=3.8"]
 gcp = ["google-cloud-storage>=2.18"]
+
+# Developer tools, installed by `uv sync` by default and left out of the image.
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
-    "respx>=0.21",
     "ruff>=0.6",
     "mypy>=1.11",
     "types-PyYAML",
@@ -41,6 +48,10 @@ derva = "derva.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# Needed for the spaCy model, which is installed from a URL.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/derva"]

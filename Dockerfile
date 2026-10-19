@@ -1,26 +1,33 @@
 # DERVA gateway image: LiteLLM proxy with the DERVA hooks, plus the derva CLI.
 FROM python:3.12-slim
 
+# uv installs exactly what uv.lock says, the same lock used on laptops and in CI.
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
     DERVA_HOME=/app
 
 WORKDIR /app
 
-# Locked dependencies first, so code changes don't reinstall them.
-COPY requirements.lock .
-RUN pip install -r requirements.lock
+# Dependencies first, so code changes don't reinstall them. No dev tools.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project \
+      --extra gateway --extra presidio --extra postgres --extra gcp
 
 # The large English model masks names more accurately than the small one.
 ARG SPACY_MODEL=en_core_web_lg
 ARG SPACY_MODEL_VERSION=3.8.0
-RUN pip install "https://github.com/explosion/spacy-models/releases/download/${SPACY_MODEL}-${SPACY_MODEL_VERSION}/${SPACY_MODEL}-${SPACY_MODEL_VERSION}-py3-none-any.whl"
+RUN uv pip install --python /opt/venv/bin/python \
+      "https://github.com/explosion/spacy-models/releases/download/${SPACY_MODEL}-${SPACY_MODEL_VERSION}/${SPACY_MODEL}-${SPACY_MODEL_VERSION}-py3-none-any.whl"
 
-COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-deps .
+RUN uv sync --frozen --no-dev \
+      --extra gateway --extra presidio --extra postgres --extra gcp
 
 COPY config ./config
 COPY data/fixtures ./data/fixtures

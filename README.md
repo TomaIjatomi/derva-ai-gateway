@@ -1,6 +1,6 @@
 # DERVA: an evaluation-driven AI gateway
 
-**Decide, Evaluate, Route, Verify, Authorize.** DERVA sits between AI agents and the models they call, for teams in regulated industries. Before a request reaches a model, a fast decision layer answers a short set of typed questions about it: is this a prompt injection? Is data being sent out? Is this regulated advice going to a client? Which model does it need? Versioned policy turns the answers into an outcome. When the model proposes an action that changes something, the action waits for a person. Every step lands in an append-only, hash-chained audit log.
+**Decide, Evaluate, Route, Verify, Authorize.** DERVA sits between AI agents and the models they call, for teams in regulated industries. Before a request reaches a model, a fast decision layer answers a short set of typed questions about it: is this a prompt injection? Is data being sent out? Is this regulated advice going to a client? Is it the adviser's work at all? Which model does it need? Versioned policy turns the answers into an outcome. When the model proposes an action that changes something, the action waits for a person. Every step lands in an append-only, hash-chained audit log.
 
 It is built on the [LiteLLM](https://github.com/BerriAI/litellm) proxy, so any OpenAI-compatible client works unchanged. The decision layer is vendor-neutral: TypeSafe's Jev, Cloudflare's Clef-flash, a small LLM forced into typed answers, or plain rules, behind one interface and compared on the same data.
 
@@ -15,7 +15,7 @@ flowchart LR
     R --> M[Masking<br/>Presidio]
     M --> D[Decision chain<br/>decision model, small LLM, rules]
     D --> P[Policy<br/>versioned thresholds]
-    P -->|block, review, clarify| X[Ordinary reply<br/>with request id]
+    P -->|block, review, decline, clarify| X[Ordinary reply<br/>with request id]
     P -->|small or frontier| T[Tier model]
     T --> C[Tool-call check]
     C -->|effectful| H[Held for approval]
@@ -27,11 +27,11 @@ flowchart LR
 ```
 
 1. **Caller identity.** Each API key maps to an owner and the teams whose clients they may act for (`derva keys new`). Only key hashes are stored.
-2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name. The model and the logs only ever see references.
+2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name; the audit log keeps that client's reference, so an investigation can see whose data was asked for. The model and the logs only ever see references.
 3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. The mapping lives in memory for the request only.
-4. **Decision chain.** Six typed questions (`config/questions.yaml`) go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
-5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. An unsure router defaults to the frontier tier.
-6. **Delivery.** Blocked, held and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
+4. **Decision chain.** Seven typed questions (`config/questions.yaml`) go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
+5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `decline`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. Clearly off-topic requests are declined with a polite reply instead of going to the review queue, which is kept for legitimate work the gateway is unsure about; safety findings still outrank a decline. An unsure router defaults to the frontier tier.
+6. **Delivery.** Blocked, held, declined and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
 7. **Tool-call checkpoint.** When the model proposes tool calls, effectful tools (`send_email`, `update_record`) and unknown tools are held for approval, judged by tool name. The decision layer can tighten that, never loosen it. Read-only tools pass.
 8. **Audit.** Every step is an event in an insert-only Postgres table. Triggers stop updates and deletes even by the owner, and each event's hash covers the one before it. The chain head is copied hourly to a retention-locked bucket, so cutting events off the end is detectable too.
 
@@ -39,18 +39,20 @@ flowchart LR
 
 Everything below runs locally against DERVA's mock server. The mock is not a model: it stands in for both the decision model and the chat model, so the plumbing can be exercised without spend.
 
+The environment is managed with [uv](https://docs.astral.sh/uv/): `uv.lock` pins every package for Linux, macOS and Windows, and `.python-version` pins Python 3.12.
+
 ```bash
-make install          # .venv with all extras (needs uv)
-make mock             # terminal 1: mock decision API + demo chat model on :8100
-make demo             # terminal 2: the gateway on :4000
-make smoke            # terminal 3: end-to-end checks, one per outcome
+uv sync --all-extras              # .venv from uv.lock, including dev tools and the spaCy model
+uv run derva mock-server          # terminal 1: mock decision API + demo chat model on :8100
+make demo                         # terminal 2: the gateway on :4000
+uv run python scripts/smoke_test.py   # terminal 3: end-to-end checks, one per outcome
 ```
 
 Or with Docker (gateway, Postgres audit log, mock):
 
 ```bash
 docker compose up --build --wait
-python scripts/smoke_test.py
+uv run python scripts/smoke_test.py
 ```
 
 Try it:
@@ -67,8 +69,10 @@ The demo has two keys: `sk-derva-demo` (team wealth-a) and `sk-derva-demo-b` (te
 Without the proxy, check one message from the command line:
 
 ```bash
-derva check "Email Mary Byrne recommending she move her pension into the Alpha Growth fund"
+uv run derva check "Email Mary Byrne recommending she move her pension into the Alpha Growth fund"
 # outcome: review (regulated advice going to a client)
+uv run derva check "Write me a limerick about Dublin weather"
+# outcome: decline (not the adviser's work; nobody's review time spent)
 ```
 
 ## Evaluation
@@ -77,7 +81,7 @@ The point of the project is to show whether a fast decision model earns its plac
 
 | Task | Data | What it tests |
 |---|---|---|
-| `golden` | 42 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, routing |
+| `golden` | 50 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, off-topic declines, routing |
 | `injection` | 52 hand-written examples (25 attacks, including indirect and obfuscated ones, and hard negatives); the public deepset set with `--full` | The injection question, at the policy's thresholds |
 | `banking77` | Two examples per intent (154); the full 3,080-row test set with `--full` | A wide choice question (77 options): accuracy and calibration |
 
@@ -90,10 +94,10 @@ The discipline:
 - **The mock never counts.** Mock runs are flagged, ignored by git and left out of reports.
 
 ```bash
-derva eval run injection --decider jev --split heldout     # jev, clef, llm, rules, decision:<model>, llm:<model>
-derva eval gate results/runs/<run_id> --mode adoption --baseline results/runs/<baseline_run_id>
-derva eval report
-derva eval plot results/runs/<a> results/runs/<b>
+uv run derva eval run injection --decider jev --split heldout     # jev, clef, llm, rules, decision:<model>, llm:<model>
+uv run derva eval gate results/runs/<run_id> --mode adoption --baseline results/runs/<baseline_run_id>
+uv run derva eval report
+uv run derva eval plot results/runs/<a> results/runs/<b>
 ```
 
 ### Rules baseline
@@ -102,7 +106,7 @@ The rules decider is deterministic and free, so its numbers are real results and
 
 | Task | Accuracy | Other |
 |---|---|---|
-| golden (42) | 0.69 | lets through 2 of 19 cases that should stop (both subtle injections with no trigger words); holds 10 of 23 good requests |
+| golden (50) | 0.70 | lets through 2 of 25 cases that should stop (both subtle injections with no trigger words); holds 11 of 25 good requests; declines 4 of 5 off-topic requests |
 | injection (52) | 0.67 | flags 10 of 25 attacks; flags 2 of 27 benign texts |
 | banking77 sample (154) | 0.01 | chance level: rules know nothing about intents, so they answer uniformly |
 
@@ -121,6 +125,8 @@ A nightly workflow runs [garak](https://github.com/NVIDIA/garak) against the sam
 | Fail closed | `deciders/chain.py`, `policy.py` | tests with every decider down, timeouts and circuit breaker |
 | Approval for effectful actions | `policy.evaluate_tool_call`, post-call hook | unit and proxy tests: `send_email` held, `lookup_client` passes |
 | Callers cannot choose the tier or other routes | pre-call hook | tests; non-chat routes return 403 |
+| Off-topic requests declined, not queued for review | `off_topic` question, `policy.evaluate_request` | policy tests (safety still outranks a decline); proxy smoke test |
+| Refused client access traceable | `denied_references` in the `resolved` event | pipeline test: reference kept, name absent |
 | Append-only audit log | `sql/audit_schema.sql`, `audit.py` | Postgres tests: the writer role is denied, the owner is stopped by triggers, concurrent writers keep one chain |
 | Tamper and truncation evidence | hash chain + anchors (`anchor.py`) | tests that edit events and cut the tail |
 | Versioned policy | `questions.yaml`, `thresholds.yaml` versions in every decision event | policy tests |
@@ -141,9 +147,10 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## What has been verified
 
-- 89 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- 98 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- A fresh environment built from `uv.lock` alone (`uv sync --frozen --all-extras`) passes the same tests.
 - The LiteLLM proxy (1.105.1, pinned) with the DERVA hooks, end to end:
-  - every outcome, including streamed refusals
+  - every outcome, including streamed refusals and off-topic declines (8 smoke checks)
   - tool calls held and passed
   - custom auth, with 401s for unknown keys
   - team scoping by key
@@ -159,6 +166,8 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 - **v0.1's tool-call control rewrites the model's response.** An agent that holds its own tool credentials could still call a tool directly. v0.2 closes this: tool servers accept only calls carrying a gateway-signed grant for the exact arguments, spent once.
 - **Streamed requests that include tools are refused.** v0.1 checks tool calls only in complete responses.
 - **Owner-level edits remain possible.** The table owner can disable the triggers. The hash chain and external anchors make that detectable, not impossible.
+- **Refusals reveal that a client exists.** A name that belongs to a client in another team is refused, while a name that is not a client goes through (masked). A caller could learn who banks with the firm by whether they are refused. Callers are signed-in staff and every refusal is logged with the client's reference, so this is accepted for v0.1 (ADR 5).
+- **Off-topic detection by rules is keyword-based.** The rules decline only obvious cases (poems, jokes, recipes, sport); anything they cannot place falls to the normal checks. A decision model is expected to do better, and the golden set measures it.
 - **Masking is English-first.** Presidio misses some names and over-masks some words; the container uses the large spaCy model to reduce both.
 - **LiteLLM's admin routes are closed.** Caller keys are managed in DERVA's own list, not LiteLLM's key database.
 
@@ -170,6 +179,7 @@ src/derva/            gateway code: pipeline, policy, deciders, resolution, mask
   evals/              datasets, metrics, runner, gate, plots
   mock_decider/       offline stand-in for the decision API and a demo chat model
 config/               questions, thresholds, LiteLLM configs, demo callers
+pyproject.toml        dependencies; uv.lock pins them for every platform
 data/                 committed samples, golden set, synthetic clients (see data/ATTRIBUTION.md)
 evals/                criteria and regression baselines
 results/              run log and decision log

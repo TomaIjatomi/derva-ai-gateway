@@ -68,15 +68,16 @@ jobs:
           id_token_audience: ${{ vars.CLOUD_RUN_SERVICE }}
           id_token_include_email: true
 
+      - uses: astral-sh/setup-uv@v5
+
       - name: Smoke test the canary
         run: |
-          pip install httpx
-          python scripts/smoke_test.py --base-url "$CANARY_URL" \
+          uv run --no-project --with httpx python scripts/smoke_test.py --base-url "$CANARY_URL" \
             --key "${{ secrets.DERVA_SMOKE_KEY }}" --token "${{ steps.token.outputs.id_token }}"
 
       - name: Load test the canary
         run: |
-          python scripts/load_test.py --base-url "$CANARY_URL" \
+          uv run --no-project --with httpx python scripts/load_test.py --base-url "$CANARY_URL" \
             --key "${{ secrets.DERVA_SMOKE_KEY }}" --token "${{ steps.token.outputs.id_token }}" \
             --requests 60 --concurrency 6 --max-error-rate 0.02 --max-p95-ms 20000
 

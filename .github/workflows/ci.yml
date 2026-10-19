@@ -29,28 +29,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install
-        run: |
-          uv pip install --system -r requirements.lock -e ".[dev,evals]"
-          python -m spacy download en_core_web_sm
+          enable-cache: true
+      - name: Install from uv.lock (Python version from .python-version)
+        run: uv sync --frozen --all-extras
       - name: Lint
         run: |
-          ruff check src tests scripts
-          ruff format --check src tests scripts
+          uv run ruff check src tests scripts
+          uv run ruff format --check src tests scripts
       - name: Type check
-        run: mypy src
+        run: uv run mypy src
       - name: Tests, including Postgres audit tests
-        run: pytest -q
+        run: uv run pytest -q
       - name: Regression gate (rules decider vs committed baselines)
-        run: make gate BIN=
+        run: make gate
       - name: Harness check through LiteLLM and the mock decider
         run: |
-          derva mock-server &
+          uv run derva mock-server &
           for i in $(seq 1 30); do curl -sf localhost:8100/health && break; sleep 1; done
-          derva eval run golden --decider mock --split all --limit 10
+          uv run derva eval run golden --decider mock --split all --limit 10
 
   terraform:
     runs-on: ubuntu-latest
@@ -72,10 +69,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start the stack
         run: docker compose up --build --wait --wait-timeout 300
+      - uses: astral-sh/setup-uv@v5
       - name: Smoke test
-        run: |
-          pip install httpx
-          python scripts/smoke_test.py
+        run: uv run --no-project --with httpx python scripts/smoke_test.py
       - name: Audit chain verifies in Postgres
         run: >
           docker compose exec -T gateway derva audit verify
