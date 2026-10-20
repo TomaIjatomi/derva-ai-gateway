@@ -106,14 +106,17 @@ def canonical_hash(data: Any) -> str:
 
 
 def _answers_for_audit(decision: DecisionResult) -> dict[str, Any]:
-    return {
-        qid: {
+    answers: dict[str, Any] = {}
+    for qid, a in decision.answers.items():
+        entry: dict[str, Any] = {
             "top": a.top,
             "probabilities": {k: round(v, 4) for k, v in a.probabilities.items()},
             "confidence": None if a.confidence is None else round(a.confidence, 4),
         }
-        for qid, a in decision.answers.items()
-    }
+        if a.provider_confidence is not None:
+            entry["provider_confidence"] = round(a.provider_confidence, 4)
+        answers[qid] = entry
+    return answers
 
 
 class Pipeline:

@@ -3,6 +3,21 @@
 One entry per decision the results justify. Newest first. Each entry names the
 run ids it rests on and the criteria version in force.
 
+## 2026-10-20: Confidence computed by DERVA for every decider
+
+- A System One provider's own confidence figure used to replace DERVA's for
+  choice and score answers, so the `action` and `route` thresholds could mean
+  different things depending on which decision model answered. DERVA now always
+  computes confidence from the probabilities with TypeSafe's formulas; the
+  provider's figure is kept as `provider_confidence` in the audit log and eval
+  records, and policy never reads it (ADR 2, amended).
+- Options a decider leaves out now share the probability it left unassigned,
+  instead of getting zero before rescaling. A one-sided `{"yes": 0.3}` from an
+  LLM had become certainty, enough to decline a request or pick a route.
+- No decision model had been run, so no recorded result is affected. Rules
+  baselines unchanged (the rules always answer every option). Thresholds and
+  criteria versions unchanged.
+
 ## 2026-10-19 (later): Written criteria for the advice questions
 
 - Questions version 2026-10-19.2 (thresholds unchanged at 2026-10-19.1):

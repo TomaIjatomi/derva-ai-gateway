@@ -50,16 +50,32 @@ def normalise(probabilities: dict[str, float]) -> dict[str, float]:
     return {k: max(0.0, v) / total for k, v in probabilities.items()}
 
 
+def fill_missing(options: list[str], given: dict[str, float]) -> dict[str, float]:
+    """Give the options a decider left out the probability it left unassigned.
+
+    Without this, ``{"yes": 0.3}`` would be rescaled to certainty. With it, "no"
+    gets the remaining 0.7. Nothing given at all becomes an even split.
+    """
+    filled = {o: max(0.0, float(given[o])) for o in options if o in given}
+    missing = [o for o in options if o not in given]
+    if missing:
+        rest = max(0.0, 1.0 - sum(filled.values())) / len(missing)
+        filled.update({o: rest for o in missing})
+    return {o: filled[o] for o in options}
+
+
 def make_answer(question: Question, probabilities: dict[str, float]) -> Answer:
     """Build a normalised answer from probabilities over the question's options.
 
-    Missing options get probability zero; unknown options are an error, because
-    a decider that invents options has broken the type contract.
+    Unknown options are an error, because a decider that invents options has
+    broken the type contract. Missing options share whatever probability the
+    decider left unassigned. Confidence is always computed here, never taken
+    from the decider, so thresholds mean the same for every decider.
     """
     unknown = set(probabilities) - set(question.options)
     if unknown:
         raise DeciderError(f"{question.id}: answer outside the schema: {sorted(unknown)}")
-    probs = normalise({opt: float(probabilities.get(opt, 0.0)) for opt in question.options})
+    probs = normalise(fill_missing(question.options, probabilities))
     if question.type is QuestionType.NOUL:
         return Answer(
             question_id=question.id,

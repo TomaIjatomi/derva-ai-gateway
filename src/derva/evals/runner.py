@@ -133,6 +133,7 @@ def _scored(example: Example, answer: Answer) -> dict[str, Any]:
         "p_label": probs.get(example.label, 0.0),
         "sum_sq": sum(p * p for p in probs.values()),
         "confidence": answer.confidence,
+        "provider_confidence": answer.provider_confidence,
     }
 
 

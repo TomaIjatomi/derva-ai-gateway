@@ -12,7 +12,9 @@ exfiltration:
   block_at: 0.8
   review_at: 0.4
 
-# Choice questions use TypeSafe's confidence (0 = even split, 1 = certain).
+# Choice questions use confidence as TypeSafe defines it (0 = even split,
+# 1 = certain), computed by DERVA from the probabilities for every decider.
+# A provider's own confidence figure is recorded but never used here.
 action:
   min_confidence: 0.5   # below this the gateway does not act on its own
 
