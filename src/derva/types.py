@@ -106,7 +106,12 @@ class Answer(BaseModel):
     question_id: str
     type: QuestionType
     probabilities: dict[str, float]
+    # Computed by DERVA from ``probabilities`` with TypeSafe's formulas, for every
+    # decider, so a policy threshold means the same whichever decider answered.
     confidence: float | None = None
+    # A provider's own confidence figure, kept for the record only. Policy never
+    # reads it: providers need not compute confidence the same way.
+    provider_confidence: float | None = None
     score: float | None = None  # probability-weighted level, score questions only
 
     @property

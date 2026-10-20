@@ -29,7 +29,7 @@ flowchart LR
 1. **Caller identity.** Each API key maps to an owner and the teams whose clients they may act for (`derva keys new`). Only key hashes are stored.
 2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name; the audit log keeps that client's reference, so an investigation can see whose data was asked for. The model and the logs only ever see references.
 3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. The mapping lives in memory for the request only.
-4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
+4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Every answer is normalised the same way and DERVA computes its confidence itself, so a threshold means the same whichever decider answered. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
 5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `decline`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. Clearly off-topic requests are declined with a polite reply instead of going to the review queue, which is kept for legitimate work the gateway is unsure about; safety findings still outrank a decline. An unsure router defaults to the frontier tier.
 6. **Delivery.** Blocked, held, declined and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
 7. **Tool-call checkpoint.** When the model proposes tool calls, effectful tools (`send_email`, `update_record`) and unknown tools are held for approval, judged by tool name. The decision layer can tighten that, never loosen it. Read-only tools pass.
@@ -147,7 +147,7 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## What has been verified
 
-- 100 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- 102 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
 - A fresh environment built from `uv.lock` alone (`uv sync --frozen --all-extras`) passes the same tests.
 - The LiteLLM proxy (1.105.1, pinned) with the DERVA hooks, end to end:
   - every outcome, including streamed refusals and off-topic declines (8 smoke checks)

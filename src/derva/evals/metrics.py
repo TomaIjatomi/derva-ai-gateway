@@ -1,8 +1,10 @@
 """Metrics for deciders: accuracy, calibration, cost of automation.
 
 Calibration uses the probability of the top answer, which every decider
-produces in the same way. The providers' own ``confidence`` figures use
-different formulas, so they are recorded but not compared directly.
+produces in the same way. ``confidence`` is DERVA's own figure, computed the
+same way for every decider; a provider's own figure is recorded as
+``provider_confidence`` but not compared, since providers need not compute it
+the same way.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ class Record(BaseModel):
     p_label: float | None = None
     sum_sq: float | None = None  # sum of squared probabilities, for the Brier score
     confidence: float | None = None
+    provider_confidence: float | None = None
     latency_ms: float | None = None
     cost_usd: float | None = None
     fallbacks: list[str] = []

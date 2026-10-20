@@ -98,9 +98,10 @@ def parse_answer(question: Question, raw: dict[str, Any]) -> Answer:
         return make_answer(question, {"yes": p, "no": 1 - p})
     probabilities = {str(k): float(v) for k, v in raw["probabilities"].items()}
     answer = make_answer(question, probabilities)
-    # Keep the provider's own confidence figure when it sends one.
+    # Record the provider's own confidence figure, but leave ``confidence`` as
+    # DERVA computed it: policy thresholds must not depend on the provider.
     if raw.get("confidence") is not None:
-        answer.confidence = float(raw["confidence"])
+        answer.provider_confidence = float(raw["confidence"])
     if question.type is QuestionType.SCORE and raw.get("score") is not None:
         answer.score = float(raw["score"])
     return answer
