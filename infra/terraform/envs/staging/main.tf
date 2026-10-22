@@ -41,7 +41,9 @@ module "gateway" {
     DERVA_FRONTIER_UPSTREAM = "anthropic/claude-sonnet-5-5"
   }
 
-  # Created empty; add values with `gcloud secrets versions add`.
+  # Created empty; add values with `gcloud secrets versions add`. Cloud Run will
+  # not create the service until each has a value, so the runbook creates these
+  # first with -target, adds the values, then applies the rest.
   secret_names = ["litellm-master-key", "derva-callers", "typesafe-api-key", "anthropic-api-key"]
 
   extra_secret_env = {
