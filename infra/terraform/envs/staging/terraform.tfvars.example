@@ -1,7 +1,7 @@
 project_id        = "your-gcp-project"
 region            = "europe-west1"
 github_repository = "your-github-user/derva-ai-gateway"
-alert_email       = "you@example.ie"
-invoker_members   = ["user:you@example.ie"]
+alert_email       = "you@example.ie"         # plain address
+invoker_members   = ["user:you@example.ie"]  # keep the user: prefix (or group:, serviceAccount:)
 # Set true for the first apply only, until the first anchor exists.
 anchor_first_run  = true
