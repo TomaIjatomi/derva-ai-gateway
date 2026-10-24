@@ -22,6 +22,13 @@ variable "invoker_members" {
   description = "Who may call the gateway, e.g. [\"user:you@example.ie\"]."
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for m in var.invoker_members : can(regex("^(user|group|serviceAccount|domain):", m))
+    ])
+    error_message = "Each invoker needs its type in front, e.g. \"user:you@example.ie\" or \"group:team@example.ie\"."
+  }
 }
 
 variable "anchor_first_run" {
