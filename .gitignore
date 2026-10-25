@@ -8,10 +8,20 @@ build/
 .pytest_cache/
 .ruff_cache/
 
-# Local state
+# Local state and secrets
 *.db
 .env
+.env.*
+!.env.example
+!.env.demo
 data/cache/
+/anchor.json
+# Written into the workspace by google-github-actions/auth
+gha-creds-*.json
+
+# Editors
+.vscode/
+.idea/
 
 # Evaluation output: mock runs check the harness and are never results.
 results/runs/*-mock-*/
@@ -24,3 +34,5 @@ results/plots/scratch/
 *.tfvars
 !*.tfvars.example
 .terraform.lock.hcl.bak
+*.tfplan
+crash.log
