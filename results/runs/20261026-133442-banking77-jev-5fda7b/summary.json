@@ -1,0 +1,205 @@
+{
+  "run_id": "20261026-133442-banking77-jev-5fda7b",
+  "task": "banking77",
+  "split": "heldout",
+  "full_dataset": false,
+  "decider": "jev",
+  "model": "typesafe/jev-1.13.0",
+  "synthetic_decider": false,
+  "questions_version": "banking77-v1",
+  "git_commit": "9e771f6",
+  "started_at": "2026-10-26T13:34:42.779974+00:00",
+  "n": 81,
+  "errors": 0,
+  "accuracy": 0.8518518518518519,
+  "macro_f1": 0.8440860215053764,
+  "ece": 0.06530614789874045,
+  "brier": 0.23608763328508936,
+  "coverage_at_95": 0.0,
+  "latency_p50_ms": 158.11930000018037,
+  "latency_p95_ms": 252.89020000036544,
+  "cost_per_1k_usd": 0.07095407407407407,
+  "extra": {
+    "fallback_rate": 0.0
+  },
+  "reliability": [
+    {
+      "lower": 0.0,
+      "upper": 0.1,
+      "count": 0,
+      "mean_confidence": null,
+      "accuracy": null
+    },
+    {
+      "lower": 0.1,
+      "upper": 0.2,
+      "count": 0,
+      "mean_confidence": null,
+      "accuracy": null
+    },
+    {
+      "lower": 0.2,
+      "upper": 0.3,
+      "count": 0,
+      "mean_confidence": null,
+      "accuracy": null
+    },
+    {
+      "lower": 0.3,
+      "upper": 0.4,
+      "count": 1,
+      "mean_confidence": 0.38,
+      "accuracy": 0.0
+    },
+    {
+      "lower": 0.4,
+      "upper": 0.5,
+      "count": 0,
+      "mean_confidence": null,
+      "accuracy": null
+    },
+    {
+      "lower": 0.5,
+      "upper": 0.6,
+      "count": 6,
+      "mean_confidence": 0.5593771043771044,
+      "accuracy": 0.5
+    },
+    {
+      "lower": 0.6,
+      "upper": 0.7,
+      "count": 0,
+      "mean_confidence": null,
+      "accuracy": null
+    },
+    {
+      "lower": 0.7,
+      "upper": 0.8,
+      "count": 8,
+      "mean_confidence": 0.77125,
+      "accuracy": 0.75
+    },
+    {
+      "lower": 0.8,
+      "upper": 0.9,
+      "count": 8,
+      "mean_confidence": 0.8595580808080808,
+      "accuracy": 0.875
+    },
+    {
+      "lower": 0.9,
+      "upper": 1.0,
+      "count": 58,
+      "mean_confidence": 0.9872413793103448,
+      "accuracy": 0.9137931034482759
+    }
+  ],
+  "automation": [
+    {
+      "threshold": 0.0,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.05,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.1,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.15,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.2,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.25,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.3,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.35,
+      "coverage": 1.0,
+      "accuracy": 0.8518518518518519
+    },
+    {
+      "threshold": 0.4,
+      "coverage": 0.9876543209876543,
+      "accuracy": 0.8625
+    },
+    {
+      "threshold": 0.45,
+      "coverage": 0.9876543209876543,
+      "accuracy": 0.8625
+    },
+    {
+      "threshold": 0.5,
+      "coverage": 0.9876543209876543,
+      "accuracy": 0.8625
+    },
+    {
+      "threshold": 0.55,
+      "coverage": 0.9753086419753086,
+      "accuracy": 0.8734177215189873
+    },
+    {
+      "threshold": 0.6,
+      "coverage": 0.9259259259259259,
+      "accuracy": 0.8933333333333333
+    },
+    {
+      "threshold": 0.65,
+      "coverage": 0.9135802469135802,
+      "accuracy": 0.8918918918918919
+    },
+    {
+      "threshold": 0.7,
+      "coverage": 0.9135802469135802,
+      "accuracy": 0.8918918918918919
+    },
+    {
+      "threshold": 0.75,
+      "coverage": 0.8888888888888888,
+      "accuracy": 0.8888888888888888
+    },
+    {
+      "threshold": 0.8,
+      "coverage": 0.8518518518518519,
+      "accuracy": 0.9130434782608695
+    },
+    {
+      "threshold": 0.85,
+      "coverage": 0.7777777777777778,
+      "accuracy": 0.9206349206349206
+    },
+    {
+      "threshold": 0.9,
+      "coverage": 0.7283950617283951,
+      "accuracy": 0.9152542372881356
+    },
+    {
+      "threshold": 0.95,
+      "coverage": 0.654320987654321,
+      "accuracy": 0.9245283018867925
+    }
+  ],
+  "per_category": {
+    "-": {
+      "n": 81.0,
+      "accuracy": 0.8518518518518519
+    }
+  }
+}
