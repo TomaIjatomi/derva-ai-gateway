@@ -26,8 +26,12 @@ RUN uv pip install --python /opt/venv/bin/python \
       "https://github.com/explosion/spacy-models/releases/download/${SPACY_MODEL}-${SPACY_MODEL_VERSION}/${SPACY_MODEL}-${SPACY_MODEL_VERSION}-py3-none-any.whl"
 
 COPY src ./src
-RUN uv sync --frozen --no-dev \
+# --inexact keeps the spaCy model installed above: it is not in uv.lock, and a
+# plain sync removes anything the lock does not list.
+RUN uv sync --frozen --no-dev --inexact \
       --extra gateway --extra presidio --extra postgres --extra gcp
+# Fail the build, not the first start, if the model is missing.
+RUN python -c "import ${SPACY_MODEL}"
 
 COPY config ./config
 COPY data/fixtures ./data/fixtures
