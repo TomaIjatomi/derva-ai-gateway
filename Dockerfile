@@ -38,13 +38,22 @@ COPY sql ./sql
 RUN useradd --create-home --uid 10001 derva
 USER derva
 
+# Presidio's email check uses tldextract, which downloads the public suffix list
+# on first use, with no timeout by default. Fetch it now, into the image, so the
+# running gateway never reaches out for it; and bound any later fetch.
+RUN python -c "import tldextract; tldextract.extract('example.com')"
+
+# DERVA_WARM_START loads the masker's language model while the proxy starts, so
+# the health check passes only once the gateway can answer without delay.
 ENV DERVA_MASKER=presidio \
     DERVA_SPACY_MODEL=${SPACY_MODEL} \
     DERVA_LITELLM_CONFIG=config/litellm.yaml \
+    DERVA_WARM_START=true \
+    TLDEXTRACT_CACHE_TIMEOUT=5 \
     PORT=4000
 EXPOSE 4000
 
-HEALTHCHECK --interval=15s --timeout=3s --start-period=40s \
+HEALTHCHECK --interval=15s --timeout=3s --start-period=180s \
   CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health/liveliness' % os.environ['PORT'])"
 
 # Cloud Run sets PORT; the same image runs `derva mock-server` in compose.
