@@ -27,7 +27,7 @@ jobs:
     env:
       DERVA_TEST_PG_ADMIN_URL: postgresql+psycopg://postgres:derva-test@localhost/derva_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -52,7 +52,7 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
       - name: Format
         run: terraform fmt -check -recursive infra/terraform
@@ -66,7 +66,7 @@ jobs:
     # The whole demo stack, built from the Dockerfile, checked end to end.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack
         run: docker compose up --build --wait --wait-timeout 300
       - uses: astral-sh/setup-uv@v5

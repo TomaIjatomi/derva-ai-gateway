@@ -27,7 +27,7 @@ jobs:
       DERVA_DECIDER_MODEL: ${{ vars.DERVA_DECIDER_MODEL }}
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - name: Install the gateway from uv.lock
         run: uv sync --frozen --extra gateway
@@ -79,7 +79,7 @@ jobs:
       # e.g. 15 for Gemini's free tier; empty means no limit.
       DERVA_EVAL_RPM: ${{ vars.DERVA_EVAL_RPM }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Skip when this decider has no key
         id: keys
         run: |
