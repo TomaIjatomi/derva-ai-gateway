@@ -73,10 +73,10 @@ class Settings(BaseModel):
         return cls.model_validate(values)
 
 
-def build_masker(settings: Settings) -> Masker:
+def build_masker(settings: Settings, firm_domains: list[str]) -> Masker:
     if settings.masker == "presidio":
-        return PresidioMasker(model_name=settings.spacy_model)
-    return RegexMasker()
+        return PresidioMasker(model_name=settings.spacy_model, firm_domains=firm_domains)
+    return RegexMasker(firm_domains)
 
 
 def build_pipeline(settings: Settings) -> Pipeline:
@@ -99,11 +99,12 @@ def build_pipeline(settings: Settings) -> Pipeline:
         )
     links.append(Link(RulesDecider(), timeout_s=1.0))
 
+    thresholds = load_thresholds(settings.thresholds_path)
     return Pipeline(
         directory=InMemoryDirectory.from_json(settings.crm_path),
-        masker=build_masker(settings),
+        masker=build_masker(settings, thresholds.firm.domains),
         decider=FallbackChain(links),
         questions=load_questions(settings.questions_path),
-        thresholds=load_thresholds(settings.thresholds_path),
+        thresholds=thresholds,
         audit=AuditStore(settings.audit_url),
     )

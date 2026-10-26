@@ -45,9 +45,32 @@ def test_other_team_can_act_for_its_own_client(directory: InMemoryDirectory) -> 
 
 def test_regex_masker_numbers_distinct_values() -> None:
     m = RegexMasker().mask("cc a@x.ie and b@y.ie, then a@x.ie again")
-    assert m.text == "cc <EMAIL_ADDRESS_1> and <EMAIL_ADDRESS_2>, then <EMAIL_ADDRESS_1> again"
-    assert m.counts == {"EMAIL_ADDRESS": 2}
+    assert m.text == "cc <EXTERNAL_EMAIL_1> and <EXTERNAL_EMAIL_2>, then <EXTERNAL_EMAIL_1> again"
+    assert m.counts == {"EXTERNAL_EMAIL": 2}
     assert m.unmask(m.text) == "cc a@x.ie and b@y.ie, then a@x.ie again"
+
+
+def test_email_placeholders_say_which_side_of_the_firm_boundary() -> None:
+    m = RegexMasker(["firm.example.ie"]).mask(
+        "Send it to ops@firm.example.ie, ops@Dublin.Firm.example.ie and mary@example.ie,"
+        " not to ops@notfirm.example.ie"
+    )
+    assert m.text == (
+        "Send it to <FIRM_EMAIL_1>, <FIRM_EMAIL_2> and <EXTERNAL_EMAIL_1>,"
+        " not to <EXTERNAL_EMAIL_2>"
+    )
+    assert m.counts == {"FIRM_EMAIL": 2, "EXTERNAL_EMAIL": 2}
+
+
+def test_firm_domains_must_be_plain_domains() -> None:
+    from pydantic import ValidationError
+
+    from derva.config import FirmBoundary
+
+    assert FirmBoundary(domains=[" Firm.Example.IE. "]).domains == ["firm.example.ie"]
+    for bad in ("@firm.ie", "https://firm.ie", "localhost", ""):
+        with pytest.raises(ValidationError):
+            FirmBoundary(domains=[bad])
 
 
 def test_masking_never_touches_client_references() -> None:
@@ -73,6 +96,7 @@ def test_presidio_catches_names() -> None:
     m = masker.mask("Forward the statement to Peter Murphy at peter.m@gmail.com")
     assert "Peter Murphy" not in m.text
     assert "peter.m@gmail.com" not in m.text
+    assert "<EXTERNAL_EMAIL_1>" in m.text
 
 
 def test_presidio_refuses_a_missing_model_instead_of_downloading_it() -> None:

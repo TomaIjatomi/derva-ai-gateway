@@ -6,16 +6,23 @@ personal data it sees but cannot remove all of it: Presidio misses some, and
 confidential data that is not personal data passes through. The eval harness
 measures how much masking catches; this module makes no stronger claim.
 
-Placeholders are numbered per distinct value (``<EMAIL_ADDRESS_1>``,
-``<EMAIL_ADDRESS_2>``), so the decider can still tell that two addresses differ,
-which matters for the exfiltration question. The mapping back to real values is
-held in memory for one request only and is never written anywhere.
+Placeholders are numbered per distinct value (``<PHONE_NUMBER_1>``,
+``<PHONE_NUMBER_2>``), so the decider can still tell that two values differ. An
+email placeholder also says which side of the firm's boundary the address is on:
+``<FIRM_EMAIL_1>`` for an address on one of the firm's own domains, and
+``<EXTERNAL_EMAIL_1>`` for any other. The exfiltration question turns on where
+data would go, and the decider must be able to tell that without seeing the
+address. With no firm domains configured, every address counts as external.
+
+The mapping back to real values is held in memory for one request only and is
+never written anywhere.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -60,7 +67,16 @@ class Masker(Protocol):
     def mask(self, text: str) -> MaskResult: ...
 
 
-def _apply(text: str, spans: list[Span]) -> MaskResult:
+def email_label(address: str, firm_domains: Sequence[str]) -> str:
+    """``FIRM_EMAIL`` for an address on a firm domain or its subdomain, else ``EXTERNAL_EMAIL``."""
+    domain = address.rsplit("@", 1)[-1].lower().rstrip(".")
+    for firm in firm_domains:
+        if domain == firm or domain.endswith("." + firm):
+            return "FIRM_EMAIL"
+    return "EXTERNAL_EMAIL"
+
+
+def _apply(text: str, spans: list[Span], firm_domains: Sequence[str] = ()) -> MaskResult:
     """Replace spans with numbered placeholders, skipping client references."""
     protected = [(m.start(), m.end()) for m in REFERENCE_PATTERN.finditer(text)]
 
@@ -84,10 +100,11 @@ def _apply(text: str, spans: list[Span]) -> MaskResult:
     cursor = 0
     for span in chosen:
         value = text[span.start : span.end]
-        key = (span.entity, value)
+        label = email_label(value, firm_domains) if span.entity == "EMAIL_ADDRESS" else span.entity
+        key = (label, value)
         if key not in numbering:
-            counters[span.entity] = counters.get(span.entity, 0) + 1
-            numbering[key] = f"<{span.entity}_{counters[span.entity]}>"
+            counters[label] = counters.get(label, 0) + 1
+            numbering[key] = f"<{label}_{counters[label]}>"
             mapping[numbering[key]] = value
         out.append(text[cursor : span.start])
         out.append(numbering[key])
@@ -112,13 +129,16 @@ class RegexMasker:
     it is not enough for production: it cannot find a person's name.
     """
 
+    def __init__(self, firm_domains: Sequence[str] = ()) -> None:
+        self._firm_domains = tuple(firm_domains)
+
     def mask(self, text: str) -> MaskResult:
         spans = [
             Span(m.start(), m.end(), entity)
             for entity, rx in _REGEXES.items()
             for m in rx.finditer(text)
         ]
-        return _apply(text, spans)
+        return _apply(text, spans, self._firm_domains)
 
 
 class PresidioMasker:
@@ -129,6 +149,7 @@ class PresidioMasker:
         model_name: str = "en_core_web_sm",
         entities: tuple[str, ...] = DEFAULT_ENTITIES,
         score_threshold: float = 0.4,
+        firm_domains: Sequence[str] = (),
     ) -> None:
         import importlib.util
 
@@ -151,7 +172,7 @@ class PresidioMasker:
         self._analyzer = AnalyzerEngine(nlp_engine=provider.create_engine())
         self._entities = list(entities)
         self._threshold = score_threshold
-        self._regex = RegexMasker()
+        self._firm_domains = tuple(firm_domains)
 
     def mask(self, text: str) -> MaskResult:
         results = self._analyzer.analyze(
@@ -166,13 +187,13 @@ class PresidioMasker:
             for entity, rx in _REGEXES.items()
             for m in rx.finditer(text)
         ]
-        return _apply(text, spans)
+        return _apply(text, spans, self._firm_domains)
 
 
-def default_masker() -> Masker:
+def default_masker(firm_domains: Sequence[str] = ()) -> Masker:
     """Presidio when available, otherwise patterns only (with a loud warning)."""
     try:
-        return PresidioMasker()
+        return PresidioMasker(firm_domains=firm_domains)
     except Exception as exc:  # pragma: no cover - depends on the environment
         import warnings
 
@@ -181,4 +202,4 @@ def default_masker() -> Masker:
             "which does not catch names",
             stacklevel=2,
         )
-        return RegexMasker()
+        return RegexMasker(firm_domains)

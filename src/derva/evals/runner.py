@@ -207,12 +207,13 @@ async def _score_golden(pipeline: Pipeline, example: Example) -> m.Record:
 
 
 def golden_pipeline(decider: Decider, masker: Masker | None = None) -> Pipeline:
+    thresholds = load_thresholds()
     return Pipeline(
         directory=InMemoryDirectory.from_json(ROOT / "data" / "fixtures" / "crm_seed.json"),
-        masker=masker or RegexMasker(),
+        masker=masker or RegexMasker(thresholds.firm.domains),
         decider=decider,
         questions=load_questions(),
-        thresholds=load_thresholds(),
+        thresholds=thresholds,
         audit=AuditStore("sqlite://"),
     )
 
