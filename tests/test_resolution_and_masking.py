@@ -73,3 +73,11 @@ def test_presidio_catches_names() -> None:
     m = masker.mask("Forward the statement to Peter Murphy at peter.m@gmail.com")
     assert "Peter Murphy" not in m.text
     assert "peter.m@gmail.com" not in m.text
+
+
+def test_presidio_refuses_a_missing_model_instead_of_downloading_it() -> None:
+    pytest.importorskip("presidio_analyzer")
+    from derva.masking import PresidioMasker
+
+    with pytest.raises(RuntimeError, match="not installed"):
+        PresidioMasker(model_name="en_core_web_not_a_model")

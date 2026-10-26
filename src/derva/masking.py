@@ -130,9 +130,18 @@ class PresidioMasker:
         entities: tuple[str, ...] = DEFAULT_ENTITIES,
         score_threshold: float = 0.4,
     ) -> None:
+        import importlib.util
+
         from presidio_analyzer import AnalyzerEngine
         from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+        # Presidio downloads a missing model with pip at run time. A gateway
+        # should not fetch code while serving, so stop with a clear message.
+        if importlib.util.find_spec(model_name) is None:
+            raise RuntimeError(
+                f"spaCy model {model_name!r} is not installed. Install it with uv "
+                f"(the project pins en_core_web_sm) or set DERVA_SPACY_MODEL to one that is."
+            )
         provider = NlpEngineProvider(
             nlp_configuration={
                 "nlp_engine_name": "spacy",
