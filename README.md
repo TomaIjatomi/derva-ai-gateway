@@ -124,6 +124,26 @@ The rules decider is deterministic and free, so its numbers are real results and
 
 The rules catch every obvious attack and miss what a model would need to understand. Their honest uncertainty sends many harmless requests to a person. That is the gap a decision model has to close, at a cost and latency the adoption criteria spell out. The banking77 row shows why calibration alone is not enough: uniform answers are perfectly calibrated and useless.
 
+### Decision models on the held-out split
+
+Jev is the decision model: the only decider inside the 500 ms budget, and the only one to meet every adoption criterion written before the runs. Three golden runs gave the same answer on all 33 cases. Held-out split, 26 October 2026; run ids and reasoning are in `results/DECISIONS.md`.
+
+| | Rules | Jev 1.13.0 | Clef-flash | Claude Haiku 5.5 |
+|---|---|---|---|---|
+| Golden accuracy (33 cases) | 0.67 | **0.88** | 0.64 | 0.85 |
+| Golden: should stop, let through (of 16) | 2 | **0** | 0 | 0 |
+| Golden: good requests held (of 15) | 7 | **2** | 7 | 3 |
+| Injection: attacks flagged (of 19) | 8 | **19** | 16 (1 timed out) | 19 |
+| Injection: benign texts flagged (of 16) | 0 | 0 | 0 | 0 |
+| Injection calibration error (ECE) | 0.21 | 0.05 | 0.07 | 0.04 |
+| Banking77 accuracy (81) | 0.02 | 0.85 | **0.96** | 0.79 |
+| Banking77 calibration error (ECE) | 0.01 | 0.07 | 0.06 | 0.10 |
+| p95 latency, golden | 7 ms | **340 ms** | 1,103 ms | 2,169 ms |
+| Cost per 1,000 requests, golden | $0 | $0.05 | $0.10 | $0.24 |
+| Adoption criteria | baseline | **all 15 pass** | fails latency on every task, golden holds and accuracy, injection recall | fails latency on every task, golden holds |
+
+Clef-flash is the most accurate on Banking77's 77-way question but too slow for the request path, and it holds half the good gateway requests. Haiku matches Jev's golden accuracy within the noise (difference −0.06 to +0.12, 95% bootstrap) at six times the latency and five times the cost. Golden ran under questions 2026-10-26.1; injection and Banking77 under 2026-10-19.2, whose questions for those tasks are the same.
+
 ### Red teaming
 
 A nightly workflow runs [garak](https://github.com/NVIDIA/garak) against the same model twice, through the gateway and around it, and reports attack success per probe for both (`garak/README.md`). It needs a real target model, so it runs only when one is configured.
@@ -171,11 +191,12 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 - The schema migration on a fresh Postgres 16 database, run twice.
 - The Terraform: applied to a staging project, after two fixes the first apply surfaced, then torn down until the demos; `validate` passes under OpenTofu 1.10.6 with Google provider 6.50.0.
 - The Docker image and `docker compose` on Docker Desktop (Windows): all containers healthy, all 8 smoke checks pass with Presidio and spaCy's large model, and the audit chain verifies in Postgres. The first runs found that the image's second install step removed the model; that is fixed, and the build now fails if the model is missing.
-- Not yet run: the GitHub workflows, garak, and real decision models. The workflows run in CI.
+- Jev, Clef-flash and Claude Haiku 5.5 on all three held-out sets, against the adoption criteria (see Evaluation).
+- Not yet run: the GitHub workflows and garak. The workflows run in CI.
 
 ## Known limitations
 
-- **Decision-model results are partial.** Jev, Clef-flash and Claude Haiku 5.5 have been run on the held-out splits. The golden runs came before questions 2026-10-26.1 changed the exfiltration question, so they must be repeated before an adoption decision (`results/DECISIONS.md`).
+- **The held-out evidence is thin.** 33 golden cases, written by the author. No unsafe pass in 16 is consistent with a true rate of up to about 17%, and Jev's over-hold rate (2 of 15) clears the 15% limit by one case. The exfiltration question was widened after the first held-out runs; Jev's pass holds with the three affected cases left out. The public injection set (`--full`) and an independent reviewer's labels are the next evidence.
 - **Inside or outside the firm is decided by email domain.** The rules decider counts every link as outside, and nothing yet tells a decider that an outside address is the client's own. At the tool-call check that could hold a legitimate email to a client as exfiltration; every send is held for a person anyway. v0.2 can label a client's address from the CRM.
 - **Who may export client data in bulk is not controlled yet.** v0.1 blocks client data leaving the firm and holds every send for a person; bulk exports inside the firm pass the request check. An export permission, granted per caller or per export, belongs with v0.2's signed grants.
 - **The golden and injection seed sets are small and written by the author.** They test the harness and the obvious cases. The public datasets (`--full`) and an independent reviewer's labels would make the results stronger.
