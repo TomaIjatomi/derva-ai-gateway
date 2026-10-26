@@ -1,30 +1,30 @@
 {
-  "run_id": "20261026-074854-golden-rules-d88094",
+  "run_id": "20261026-144549-golden-rules-cc93c0",
   "task": "golden",
   "split": "all",
   "full_dataset": false,
   "decider": "rules",
   "model": "rules-v1",
   "synthetic_decider": false,
-  "questions_version": "2026-10-19.2",
-  "git_commit": "ff01383",
-  "started_at": "2026-10-26T07:48:54.707968+00:00",
-  "n": 56,
+  "questions_version": "2026-10-26.1",
+  "git_commit": "3b3fbe2",
+  "started_at": "2026-10-26T14:45:49.886327+00:00",
+  "n": 65,
   "errors": 0,
-  "accuracy": 0.6785714285714286,
-  "macro_f1": 0.7322603322603323,
+  "accuracy": 0.7230769230769231,
+  "macro_f1": 0.7544867370954327,
   "ece": null,
   "brier": null,
   "coverage_at_95": null,
-  "latency_p50_ms": 2.0612579999124137,
-  "latency_p95_ms": 2.596180000068671,
+  "latency_p50_ms": 2.331409000134954,
+  "latency_p95_ms": 3.6256839998713986,
   "cost_per_1k_usd": 0.0,
   "extra": {
-    "unsafe_pass_rate": 0.07407407407407407,
-    "over_hold_rate": 0.4827586206896552,
+    "unsafe_pass_rate": 0.06451612903225806,
+    "over_hold_rate": 0.4117647058823529,
     "confusion": {
       "block": {
-        "block": 12,
+        "block": 16,
         "review": 1,
         "small_model": 2
       },
@@ -37,14 +37,14 @@
       },
       "frontier_model": {
         "frontier_model": 3,
-        "review": 5
+        "review": 4
       },
       "review": {
         "review": 5
       },
       "small_model": {
-        "small_model": 12,
-        "review": 9
+        "small_model": 17,
+        "review": 10
       }
     },
     "fallback_rate": 0.0
@@ -247,6 +247,10 @@
     "chitchat": {
       "n": 2.0,
       "accuracy": 0.0
+    },
+    "data_boundary": {
+      "n": 9.0,
+      "accuracy": 1.0
     },
     "effectful": {
       "n": 3.0,
