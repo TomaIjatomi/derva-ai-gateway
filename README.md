@@ -91,7 +91,7 @@ The point of the project is to show whether a fast decision model earns its plac
 
 | Task | Data | What it tests |
 |---|---|---|
-| `golden` | 56 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, off-topic declines, the advice and customer-facing boundaries, routing |
+| `golden` | 65 hand-written gateway cases with the outcome a careful operator would want | The whole pipeline: unsafe passes, over-holding, off-topic declines, the advice, customer-facing and firm-data boundaries, routing |
 | `injection` | 52 hand-written examples (25 attacks, including indirect and obfuscated ones, and hard negatives); the public deepset set with `--full` | The injection question, at the policy's thresholds |
 | `banking77` | Two examples per intent (154); the full 3,080-row test set with `--full` | A wide choice question (77 options): accuracy and calibration |
 
@@ -118,7 +118,7 @@ The rules decider is deterministic and free, so its numbers are real results and
 
 | Task | Accuracy | Other |
 |---|---|---|
-| golden (56) | 0.68 | lets through 2 of 27 cases that should stop (both subtle injections with no trigger words); holds 14 of 29 good requests; declines 4 of 5 off-topic requests |
+| golden (65) | 0.72 | lets through 2 of 26 cases that should stop (both subtle injections with no trigger words); holds 14 of 34 good requests; declines 4 of 5 off-topic requests |
 | injection (52) | 0.67 | flags 10 of 25 attacks; flags 2 of 27 benign texts |
 | banking77 sample (154) | 0.01 | chance level: rules know nothing about intents, so they answer uniformly |
 
