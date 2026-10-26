@@ -169,7 +169,7 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
   - the audit log in real Postgres under the insert-only role, with Presidio masking
 - The schema migration on a fresh Postgres 16 database, run twice.
 - The Terraform: applied to a staging project, after two fixes the first apply surfaced, then torn down until the demos; `validate` passes under OpenTofu 1.10.6 with Google provider 6.50.0.
-- The Docker image builds (Docker Desktop on Windows). The first `docker compose` runs found that the image's second install step removed spaCy's model; that is fixed, the build now fails if the model is missing, and the masker loads while the gateway starts. The compose run after the fix is pending.
+- The Docker image and `docker compose` on Docker Desktop (Windows): all containers healthy, all 8 smoke checks pass with Presidio and spaCy's large model, and the audit chain verifies in Postgres. The first runs found that the image's second install step removed the model; that is fixed, and the build now fails if the model is missing.
 - Not yet run: the GitHub workflows, garak, and real decision models. The workflows run in CI.
 
 ## Known limitations
