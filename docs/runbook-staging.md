@@ -114,3 +114,10 @@ gcloud scheduler jobs resume derva-audit-anchor-hourly --location europe-west1
 ```
 
 If a `terraform plan` taken while paused proposes changing the activation policy, it is offering to start the database again. `terraform destroy` brings the cost to zero, at the price of repeating this bootstrap.
+
+Google will not delete database users or databases from a stopped instance, so destroying a paused staging fails on them. Either start the instance first, or drop them from Terraform's state (deleting the instance removes them anyway) and destroy:
+
+```bash
+terraform state rm module.database.google_sql_user.owner module.database.google_sql_user.app module.database.google_sql_database.derva
+terraform destroy
+```
