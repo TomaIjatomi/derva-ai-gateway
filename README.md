@@ -4,7 +4,7 @@
 
 It is built on the [LiteLLM](https://github.com/BerriAI/litellm) proxy, so any OpenAI-compatible client works unchanged. The decision layer is vendor-neutral: TypeSafe's Jev, Cloudflare's Clef-flash, a small LLM forced into typed answers, or plain rules, behind one interface and compared on the same data.
 
-> **Status: v0.1.** The gateway, the controls, the evaluation harness, the CI gates and the staging infrastructure are built and tested (details under [What has been verified](#what-has-been-verified)). No decision model has been evaluated yet. The only results below come from the rules baseline. The approval service and signed tool-call grants are v0.2.
+> **Status: v0.1.** The gateway, the controls, the evaluation harness, the CI gates and the staging infrastructure are built and tested (details under [What has been verified](#what-has-been-verified)). Jev, Clef-flash and Claude Haiku 5.5 have been evaluated on the held-out sets against criteria written before the runs. Jev met every criterion and is the decision model ([results](#decision-models-on-the-held-out-split)). Staging is switched off between demos. The approval service and signed tool-call grants are v0.2.
 
 ## How a request flows
 
@@ -29,7 +29,7 @@ flowchart LR
 1. **Caller identity.** Each API key maps to an owner and the teams whose clients they may act for (`derva keys new`). Only key hashes are stored.
 2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name; the audit log keeps that client's reference, so an investigation can see whose data was asked for. The model and the logs only ever see references.
 3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. An email placeholder keeps one fact, which side of the firm's boundary the address is on: `<FIRM_EMAIL_1>` for the firm's own domains (listed in `config/thresholds.yaml`), `<EXTERNAL_EMAIL_1>` for any other, clients' included. The mapping lives in memory for the request only.
-4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Every answer is normalised the same way and DERVA computes its confidence itself, so a threshold means the same whichever decider answered. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
+4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM (Jev 1.13.0, chosen on the held-out results), then optionally a small LLM, then rules. Every answer is normalised the same way and DERVA computes its confidence itself, so a threshold means the same whichever decider answered. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
 5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `decline`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. Clearly off-topic requests are declined with a polite reply instead of going to the review queue, which is kept for legitimate work the gateway is unsure about; safety findings still outrank a decline. An unsure router defaults to the frontier tier.
 6. **Delivery.** Blocked, held, declined and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
 7. **Tool-call checkpoint.** When the model proposes tool calls, effectful tools (`send_email`, `update_record`) and unknown tools are held for approval, judged by tool name. The decision layer can tighten that, never loosen it. Read-only tools pass.
@@ -122,7 +122,7 @@ The rules decider is deterministic and free, so its numbers are real results and
 | injection (52) | 0.67 | flags 10 of 25 attacks; flags 2 of 27 benign texts |
 | banking77 sample (154) | 0.01 | chance level: rules know nothing about intents, so they answer uniformly |
 
-The rules catch every obvious attack and miss what a model would need to understand. Their honest uncertainty sends many harmless requests to a person. That is the gap a decision model has to close, at a cost and latency the adoption criteria spell out. The banking77 row shows why calibration alone is not enough: uniform answers are perfectly calibrated and useless.
+The rules catch every obvious attack and miss what a model would need to understand. Their honest uncertainty sends many harmless requests to a person. That is the gap a decision model has to close, at a cost and latency the adoption criteria spell out. The next table shows how far each one closed it. The banking77 row shows why calibration alone is not enough: uniform answers are perfectly calibrated and useless.
 
 ### Decision models on the held-out split
 
@@ -178,6 +178,8 @@ A nightly workflow runs [garak](https://github.com/NVIDIA/garak) against the sam
 
 The deploy workflow builds the image, runs the schema migration, and deploys a canary with no traffic. It moves traffic only after the smoke test and a short load test pass against the canary's own URL. Bootstrap steps are in [`docs/runbook-staging.md`](docs/runbook-staging.md).
 
+Staging is torn down between demos. While the `GCP_PROJECT_ID` repository variable is unset, the deploy workflow skips itself, and the nightly workflow is switched off so that it makes no paid model calls.
+
 ## What has been verified
 
 - 119 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
@@ -189,22 +191,22 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
   - team scoping by key
   - the audit log in real Postgres under the insert-only role, with Presidio masking
 - The schema migration on a fresh Postgres 16 database, run twice.
-- The Terraform: applied to a staging project, after two fixes the first apply surfaced, then torn down until the demos; `validate` passes under OpenTofu 1.10.6 with Google provider 6.50.0.
+- The Terraform: applied to a staging project, after two fixes the first apply surfaced, then torn down until the demos. `terraform fmt` and `validate` pass in CI with Google provider 6.50.0, and `validate` also passes under OpenTofu 1.10.6.
 - The Docker image and `docker compose` on Docker Desktop (Windows): all containers healthy, all 8 smoke checks pass with Presidio and spaCy's large model, and the audit chain verifies in Postgres. The first runs found that the image's second install step removed the model; that is fixed, and the build now fails if the model is missing.
+- GitHub Actions CI on every push: lint, strict type checks, the tests with Postgres, the regression gate, the Terraform checks and the `docker compose` stack, all passing on GitHub's runners.
 - Jev, Clef-flash and Claude Haiku 5.5 on all three held-out sets, against the adoption criteria (see Evaluation).
-- Not yet run: the GitHub workflows and garak. The workflows run in CI.
+- Not yet run: the nightly garak scan and evaluations (they make paid model calls) and the deploy workflow (staging is off).
 
 ## Known limitations
 
-- **The held-out evidence is thin.** 33 golden cases, written by the author. No unsafe pass in 16 is consistent with a true rate of up to about 17%, and Jev's over-hold rate (2 of 15) clears the 15% limit by one case. The exfiltration question was widened after the first held-out runs; Jev's pass holds with the three affected cases left out. The public injection set (`--full`) and an independent reviewer's labels are the next evidence.
+- **The held-out evidence is thin.** The golden (65) and injection (52) sets are small and written by the author, and the held-out golden split is 33 cases. No unsafe pass in 16 is consistent with a true rate of up to about 17%, and Jev's over-hold rate (2 of 15) clears the 15% limit by one case. The exfiltration question was widened after the first held-out runs; Jev's pass holds with the three affected cases left out. The public injection set (`--full`) and an independent reviewer's labels are the next evidence.
 - **Inside or outside the firm is decided by email domain.** The rules decider counts every link as outside, and nothing yet tells a decider that an outside address is the client's own. At the tool-call check that could hold a legitimate email to a client as exfiltration; every send is held for a person anyway. v0.2 can label a client's address from the CRM.
 - **Who may export client data in bulk is not controlled yet.** v0.1 blocks client data leaving the firm and holds every send for a person; bulk exports inside the firm pass the request check. An export permission, granted per caller or per export, belongs with v0.2's signed grants.
-- **The golden and injection seed sets are small and written by the author.** They test the harness and the obvious cases. The public datasets (`--full`) and an independent reviewer's labels would make the results stronger.
 - **v0.1's tool-call control rewrites the model's response.** An agent that holds its own tool credentials could still call a tool directly. v0.2 closes this: tool servers accept only calls carrying a gateway-signed grant for the exact arguments, spent once.
 - **Streamed requests that include tools are refused.** v0.1 checks tool calls only in complete responses.
 - **Owner-level edits remain possible.** The table owner can disable the triggers. The hash chain and external anchors make that detectable, not impossible.
 - **Refusals reveal that a client exists.** A name that belongs to a client in another team is refused, while a name that is not a client goes through (masked). A caller could learn who banks with the firm by whether they are refused. Callers are signed-in staff and every refusal is logged with the client's reference, so this is accepted for v0.1 (ADR 5).
-- **Off-topic detection by rules is keyword-based.** The rules decline only obvious cases (poems, jokes, recipes, sport); anything they cannot place falls to the normal checks. A decision model is expected to do better, and the golden set measures it.
+- **Off-topic detection by rules is keyword-based.** The rules decline only obvious cases (poems, jokes, recipes, sport); anything they cannot place falls to the normal checks. Jev declined both held-out off-topic requests and none of the good ones: too few cases to say more.
 - **Masking is English-first.** Presidio misses some names and over-masks some words; the container uses the large spaCy model to reduce both.
 - **LiteLLM's admin routes are closed.** Caller keys are managed in DERVA's own list, not LiteLLM's key database.
 
@@ -219,7 +221,7 @@ config/               questions, thresholds, LiteLLM configs, demo callers
 pyproject.toml        dependencies; uv.lock pins them for every platform
 data/                 committed samples, golden set, synthetic clients (see data/ATTRIBUTION.md)
 evals/                criteria and regression baselines
-results/              run log and decision log
+results/              evaluation runs, run log and decision log
 sql/                  Postgres audit schema
 infra/terraform/      staging on Google Cloud
 scripts/              smoke test, load test, garak summary
