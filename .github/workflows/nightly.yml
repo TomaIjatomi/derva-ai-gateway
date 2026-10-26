@@ -50,7 +50,7 @@ jobs:
           on=$(find ~ -name 'gateway-on*.report.jsonl' | head -1)
           off=$(find ~ -name 'gateway-off*.report.jsonl' | head -1)
           uv run python scripts/garak_summary.py --on "$on" --off "$off" --out results/garak | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: garak-${{ github.run_id }}
           path: |
@@ -106,7 +106,7 @@ jobs:
             uv run derva eval run $task --decider ${{ matrix.decider }} --split heldout --cache .eval-cache.db
           done
           uv run derva eval report | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.keys.outputs.run == 'true'
         with:
           name: evals-${{ matrix.decider }}-${{ github.run_id }}
