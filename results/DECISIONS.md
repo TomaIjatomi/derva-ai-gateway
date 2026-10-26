@@ -3,6 +3,24 @@
 One entry per decision the results justify. Newest first. Each entry names the
 run ids it rests on and the criteria version in force.
 
+## 2026-10-26: The small-LLM baseline made runnable and fair
+
+- The LLM decider sent `temperature=0`, which Claude 5.5 models reject, so a
+  Haiku 5.5 baseline run would have failed on every example. It now asks for
+  temperature 0 and lets LiteLLM drop it where a model does not take it.
+- It now asks for the least thinking each model allows: minimal on Gemini
+  Flash-Lite, low effort on Claude 5.5 (whose adaptive thinking cannot be
+  switched off), nothing for models that do not think. Thinking is billed as
+  output and adds little to a classification. Checked against the requests
+  LiteLLM 1.105.1 sends, with a local stand-in for each provider.
+- `derva eval run --rpm N` spaces calls for rate-limited providers (Gemini's
+  free tier allows 15 a minute); time spent waiting is left out of latency.
+- Empty model variables (as CI passes unset ones) now fall back to the
+  defaults instead of an empty model name.
+- Golden runs report `auto@95` as "-": outcomes carry no probability. Golden
+  baseline regenerated (run 20261026-074854-golden-rules-d88094) for that field
+  only; every gated number is unchanged.
+
 ## 2026-10-20: Confidence computed by DERVA for every decider
 
 - A System One provider's own confidence figure used to replace DERVA's for

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -238,3 +241,132 @@ async def test_rules_decline_only_obvious_off_topic(questions: QuestionSet) -> N
     assert joke.answers["off_topic"].p_yes >= 0.7
     assert client_joke.answers["off_topic"].p_yes < 0.5
     assert unsure.answers["off_topic"].p_yes < 0.7
+
+
+def test_reasoning_effort_is_the_least_each_model_allows() -> None:
+    pytest.importorskip("litellm")
+    from derva.deciders.llm import default_reasoning_effort
+
+    assert default_reasoning_effort("gemini/gemini-3.5-flash-lite") == "none"
+    assert (
+        default_reasoning_effort("anthropic/claude-haiku-5-5") == "low"
+    )  # adaptive: cannot be off
+    assert default_reasoning_effort("gpt-4o-mini") is None  # does not think: leave it alone
+    assert default_reasoning_effort("someone/unknown-model") is None
+
+
+@pytest.fixture
+def fake_provider() -> Iterator[tuple[str, list[dict[str, Any]]]]:
+    """A local stand-in for the Anthropic and Gemini APIs that records each request body."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    reply = json.dumps({"route": {"small_model": 0.8, "frontier_model": 0.2}})
+    seen: list[dict[str, Any]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: Any) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            seen.append(json.loads(self.rfile.read(int(self.headers["content-length"]))))
+            if "messages" in self.path:
+                body: dict[str, Any] = {
+                    "id": "m",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-haiku-5-5",
+                    "content": [{"type": "text", "text": reply}],
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 700, "output_tokens": 60},
+                }
+            else:
+                body = {
+                    "candidates": [
+                        {
+                            "content": {"role": "model", "parts": [{"text": reply}]},
+                            "finishReason": "STOP",
+                        }
+                    ],
+                    "usageMetadata": {"promptTokenCount": 700, "candidatesTokenCount": 60},
+                }
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}", seen
+    server.shutdown()
+
+
+async def test_llm_decider_sends_what_each_provider_accepts(
+    questions: QuestionSet, fake_provider: tuple[str, list[dict[str, Any]]]
+) -> None:
+    pytest.importorskip("litellm")
+    base, seen = fake_provider
+    route = questions.subset(["route"])
+
+    claude = LLMDecider(model="anthropic/claude-haiku-5-5", api_key="k", api_base=base)
+    assert (await claude.decide("[user] fees for client:C-1042", route)).answer("route").top
+    # Claude 5.5 rejects temperature 0; thinking cannot be off, so effort is low.
+    assert "temperature" not in seen[-1]
+    assert seen[-1]["output_config"] == {"effort": "low"}
+
+    gemini = LLMDecider(model="gemini/gemini-3.5-flash-lite", api_key="k", api_base=base)
+    result = await gemini.decide("[user] fees for client:C-1042", route)
+    config = seen[-1]["generationConfig"]
+    assert config["temperature"] == 0
+    assert config["thinkingConfig"] == {"thinkingLevel": "minimal", "includeThoughts": False}
+    assert result.cost_usd and result.cost_usd > 0  # list price, even on a free tier
+
+
+async def test_rate_limit_spaces_calls_and_reports_the_wait(questions: QuestionSet) -> None:
+    from derva.deciders.ratelimit import RateLimitedDecider, rate_wait_s
+
+    now = [0.0]
+    started: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        await asyncio.sleep(0)  # let the other calls queue, as a real sleep would
+        now[0] += seconds
+
+    class Recording:
+        name = "rec"
+
+        async def decide(self, state: str, qs: QuestionSet) -> DecisionResult:
+            started.append(now[0])
+            return await RulesDecider().decide(state, qs)
+
+    limited = RateLimitedDecider(Recording(), rpm=60, clock=lambda: now[0], sleep=fake_sleep)
+
+    async def one() -> float:
+        await limited.decide("[user] hello", questions.subset(["injection"]))
+        return rate_wait_s.get()
+
+    waits = await asyncio.gather(one(), one(), one())
+    assert started == [0.0, 1.0, 2.0]  # 60 a minute: one a second
+    assert sorted(waits) == [0.0, 1.0, 2.0]
+
+
+def test_rate_limit_sits_inside_the_cache(tmp_path: Path) -> None:
+    from derva.deciders.ratelimit import RateLimitedDecider
+    from derva.evals.runner import _innermost, build_decider
+
+    decider = build_decider("rules", cache=tmp_path / "c.db", rpm=15)
+    assert isinstance(decider, CachingDecider)
+    assert isinstance(decider.inner, RateLimitedDecider)
+    assert decider.inner.interval_s == 4.0
+    assert isinstance(_innermost(decider), RulesDecider)
+
+
+def test_empty_model_variables_fall_back_to_the_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    # CI passes unset repository variables as empty strings.
+    from derva.evals.runner import build_decider
+
+    monkeypatch.setenv("DERVA_JEV_MODEL", "")
+    monkeypatch.setenv("DERVA_CLEF_MODEL", "")
+    assert build_decider("jev")._model == "typesafe/jev-latest"  # type: ignore[attr-defined]
+    assert build_decider("clef")._model == "cloudflare/clef-flash"  # type: ignore[attr-defined]

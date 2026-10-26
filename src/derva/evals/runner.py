@@ -25,6 +25,7 @@ from derva.config import CONFIG_DIR, load_questions, load_thresholds
 from derva.deciders.base import Decider
 from derva.deciders.cache import CachingDecider
 from derva.deciders.llm import LLMDecider
+from derva.deciders.ratelimit import RateLimitedDecider, rate_wait_s
 from derva.deciders.rules import RulesDecider
 from derva.deciders.systemone import LiteLLMDecisionDecider
 from derva.evals import metrics as m
@@ -47,25 +48,29 @@ PRESETS = {
 }
 
 
-def build_decider(spec: str, cache: Path | None = None) -> Decider:
-    """Build a decider from a preset name or from ``decision:<model>`` or ``llm:<model>``."""
+def build_decider(spec: str, cache: Path | None = None, rpm: float | None = None) -> Decider:
+    """Build a decider from a preset name or from ``decision:<model>`` or ``llm:<model>``.
+
+    ``rpm`` spaces calls for rate-limited providers; the cache sits outside it,
+    so cached answers come back at once.
+    """
     decider: Decider
     if spec == "rules":
         decider = RulesDecider()
     elif spec == "mock":
         decider = LiteLLMDecisionDecider(
             model="typesafe/mock-decider-0",
-            api_base=os.environ.get("DERVA_MOCK_URL", "http://localhost:8100"),
+            api_base=os.environ.get("DERVA_MOCK_URL") or "http://localhost:8100",
             api_key="mock",
             name="mock",
         )
     elif spec == "jev":
         decider = LiteLLMDecisionDecider(
-            model=os.environ.get("DERVA_JEV_MODEL", "typesafe/jev-latest"), name="jev"
+            model=os.environ.get("DERVA_JEV_MODEL") or "typesafe/jev-latest", name="jev"
         )
     elif spec == "clef":
         decider = LiteLLMDecisionDecider(
-            model=os.environ.get("DERVA_CLEF_MODEL", "cloudflare/clef-flash"), name="clef"
+            model=os.environ.get("DERVA_CLEF_MODEL") or "cloudflare/clef-flash", name="clef"
         )
     elif spec == "llm":
         model = os.environ.get("DERVA_EVAL_LLM")
@@ -78,7 +83,15 @@ def build_decider(spec: str, cache: Path | None = None) -> Decider:
         decider = LLMDecider(model=spec.removeprefix("llm:"))
     else:
         raise ValueError(f"Unknown decider {spec!r}. Presets: {', '.join(PRESETS)}")
+    if rpm:
+        decider = RateLimitedDecider(decider, rpm)
     return CachingDecider(decider, cache) if cache else decider
+
+
+def _innermost(decider: Decider) -> Decider:
+    while hasattr(decider, "inner"):
+        decider = decider.inner
+    return decider
 
 
 class RunSummary(BaseModel):
@@ -98,7 +111,7 @@ class RunSummary(BaseModel):
     macro_f1: float
     ece: float | None
     brier: float | None
-    coverage_at_95: float
+    coverage_at_95: float | None
     latency_p50_ms: float | None
     latency_p95_ms: float | None
     cost_per_1k_usd: float | None
@@ -169,6 +182,7 @@ async def _score_golden(pipeline: Pipeline, example: Example) -> m.Record:
         "category": example.category,
         "label": example.label,
     }
+    rate_wait_s.set(0.0)  # each example runs in its own task, so this is per example
     start = time.perf_counter()
     try:
         result = await pipeline.check_request(
@@ -184,7 +198,8 @@ async def _score_golden(pipeline: Pipeline, example: Example) -> m.Record:
         {
             **base,
             "predicted": result.outcome.value,
-            "latency_ms": (time.perf_counter() - start) * 1000,
+            # Time spent queuing for a rate-limited provider is not latency.
+            "latency_ms": (time.perf_counter() - start - rate_wait_s.get()) * 1000,
             "cost_usd": decision.cost_usd if decision else None,
             "fallbacks": decision.fallbacks if decision else [],
         }
@@ -234,11 +249,12 @@ async def run(
     limit: int | None = None,
     concurrency: int = 8,
     cache: Path | None = None,
+    rpm: float | None = None,
     results_dir: Path = RESULTS,
     write: bool = True,
 ) -> tuple[RunSummary, list[m.Record]]:
     examples = select(load(task, full=full), split, limit)
-    decider = build_decider(decider_spec, cache)
+    decider = build_decider(decider_spec, cache, rpm)
     started = datetime.now(UTC)
     gate = asyncio.Semaphore(concurrency)
 
@@ -277,7 +293,7 @@ async def run(
         }
     extra["fallback_rate"] = sum(bool(r.fallbacks) for r in ok) / len(ok) if ok else 0.0
 
-    model = getattr(getattr(decider, "inner", decider), "_model", None) or (
+    model = getattr(_innermost(decider), "_model", None) or (
         "rules-v1" if decider_spec == "rules" else None
     )
     summary = RunSummary(
@@ -297,7 +313,10 @@ async def run(
         macro_f1=m.macro_f1(ok),
         ece=m.expected_calibration_error(ok),
         brier=m.brier(ok),
-        coverage_at_95=m.coverage_at_accuracy(curve, 0.95),
+        # Golden scores outcomes, which carry no probability: no curve to read.
+        coverage_at_95=m.coverage_at_accuracy(curve, 0.95)
+        if any(r.p_top is not None for r in ok)
+        else None,
         latency_p50_ms=m.percentile(latencies, 50),
         latency_p95_ms=m.percentile(latencies, 95),
         cost_per_1k_usd=1000 * sum(costs) / len(costs) if costs else None,

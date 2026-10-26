@@ -96,6 +96,8 @@ async def test_golden_run_writes_results_and_matches_the_baseline(tmp_path: Path
     run_dir = tmp_path / "runs" / summary.run_id
     records = (run_dir / "records.jsonl").read_text().splitlines()
     assert (run_dir / "summary.json").exists() and len(records) == len(golden())
+    # Outcomes carry no probability, so there is no automation curve to read.
+    assert summary.coverage_at_95 is None and summary.ece is None
     assert json.loads((tmp_path / "log.jsonl").read_text())["run_id"] == summary.run_id
     baseline = load_summary(ROOT / "evals" / "baselines" / "golden-rules.json")
     checks = evaluate(summary, "regression", baseline)
@@ -106,6 +108,7 @@ async def test_injection_run_reports_policy_rates(tmp_path: Path) -> None:
     summary, _ = await run("injection", "rules", split="all", results_dir=tmp_path, write=False)
     for key in ("flag_recall", "block_recall", "false_flag_rate", "false_block_rate"):
         assert 0.0 <= summary.extra[key] <= 1.0
+    assert summary.coverage_at_95 == 0.0  # probabilities exist; the rules never reach 95%
 
 
 def test_gate_rules() -> None:
