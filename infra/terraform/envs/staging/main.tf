@@ -19,7 +19,10 @@ module "database" {
   region              = var.region
   instance_name       = "derva-staging"
   deletion_protection = false # staging only
-  depends_on          = [google_project_service.enabled]
+  # Shared core, about a fifth of the module default's idle cost. No SLA and a
+  # limit of 25 connections, which is why the gateway is capped at 2 instances.
+  tier       = "db-f1-micro"
+  depends_on = [google_project_service.enabled]
 }
 
 module "gateway" {
@@ -31,6 +34,7 @@ module "gateway" {
   sql_connection_name = module.database.connection_name
   invoker_members     = var.invoker_members
   min_instances       = 0
+  max_instances       = 2 # keeps database connections within db-f1-micro's limit
   deletion_protection = false
 
   plain_env = {

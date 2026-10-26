@@ -96,3 +96,21 @@ gcloud run jobs execute derva-audit-anchor --region europe-west1 --wait
 ```
 
 From then on it runs hourly. It fails, and writes no anchor, if the chain does not verify. That failure is the alert to investigate.
+
+## Pausing staging
+
+Cloud SQL is nearly all of staging's idle cost; Cloud Run scales to zero. Between sessions, stop the database and pause the anchor schedule (storage and backups are still billed, a few euros a month):
+
+```bash
+gcloud sql instances patch derva-staging --activation-policy=NEVER
+gcloud scheduler jobs pause derva-audit-anchor-hourly --location europe-west1
+```
+
+Start both again before a deploy, because the smoke test needs the database (it takes a minute or two to start):
+
+```bash
+gcloud sql instances patch derva-staging --activation-policy=ALWAYS
+gcloud scheduler jobs resume derva-audit-anchor-hourly --location europe-west1
+```
+
+If a `terraform plan` taken while paused proposes changing the activation policy, it is offering to start the database again. `terraform destroy` brings the cost to zero, at the price of repeating this bootstrap.
