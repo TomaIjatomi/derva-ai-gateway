@@ -40,7 +40,7 @@ module "gateway" {
   plain_env = {
     DERVA_LITELLM_CONFIG    = "config/litellm.yaml"
     DERVA_MASKER            = "presidio"
-    DERVA_DECIDER_MODEL     = "typesafe/jev-latest" # pin after the evaluation picks a version
+    DERVA_DECIDER_MODEL     = "typesafe/jev-1.13.0" # adopted 26 Oct 2026, results/DECISIONS.md
     DERVA_SMALL_UPSTREAM    = "anthropic/claude-haiku-5-5"
     DERVA_FRONTIER_UPSTREAM = "anthropic/claude-sonnet-5-5"
   }
