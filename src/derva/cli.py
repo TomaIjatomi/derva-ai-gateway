@@ -77,13 +77,27 @@ def eval_run(
     limit: Annotated[int | None, typer.Option(help="Score only the first N examples.")] = None,
     concurrency: int = 8,
     cache: Annotated[Path | None, typer.Option(help="SQLite file to cache answers in.")] = None,
+    rpm: Annotated[
+        float | None,
+        typer.Option(
+            envvar="DERVA_EVAL_RPM",
+            help="Start at most this many decider calls a minute, e.g. 15 for Gemini's free tier.",
+        ),
+    ] = None,
 ) -> None:
     """Score a decider on a dataset and write results/runs/<run_id>/."""
     from derva.evals.runner import run
 
     summary, _ = asyncio.run(
         run(
-            task, decider, split=split, full=full, limit=limit, concurrency=concurrency, cache=cache
+            task,
+            decider,
+            split=split,
+            full=full,
+            limit=limit,
+            concurrency=concurrency,
+            cache=cache,
+            rpm=rpm,
         )
     )
     if summary.synthetic_decider:

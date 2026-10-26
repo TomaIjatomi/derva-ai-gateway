@@ -92,9 +92,11 @@ The discipline:
 - **Calibration, not just accuracy.** Each run records ECE, the Brier score, a reliability diagram and the automation curve: how much can be decided automatically at 95% accuracy.
 - **Traceable runs.** Every run records the git commit, decider, model version and question-set version, and appends to `results/log.jsonl`. Decisions that follow go in `results/DECISIONS.md`.
 - **The mock never counts.** Mock runs are flagged, ignored by git and left out of reports.
+- **The small LLM gets a fair setup.** It sees the same question wording and criteria as the decision model, is asked for the least thinking each model allows (thinking is billed as output), and is not sent sampling settings a model rejects. `--rpm` spaces calls for rate-limited providers, such as Gemini's free tier at 15 a minute; time spent waiting is not counted as latency.
 
 ```bash
 uv run derva eval run injection --decider jev --split heldout     # jev, clef, llm, rules, decision:<model>, llm:<model>
+uv run derva eval run golden --decider llm:gemini/gemini-3.5-flash-lite --rpm 15 --cache .eval-cache.db
 uv run derva eval gate results/runs/<run_id> --mode adoption --baseline results/runs/<baseline_run_id>
 uv run derva eval report
 uv run derva eval plot results/runs/<a> results/runs/<b>
@@ -147,7 +149,7 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## What has been verified
 
-- 102 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- 107 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
 - A fresh environment built from `uv.lock` alone (`uv sync --frozen --all-extras`) passes the same tests.
 - The LiteLLM proxy (1.105.1, pinned) with the DERVA hooks, end to end:
   - every outcome, including streamed refusals and off-topic declines (8 smoke checks)
