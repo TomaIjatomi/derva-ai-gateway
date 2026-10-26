@@ -28,7 +28,7 @@ flowchart LR
 
 1. **Caller identity.** Each API key maps to an owner and the teams whose clients they may act for (`derva keys new`). Only key hashes are stored.
 2. **Client resolution.** Client names in the request become caller-scoped references (`Mary Byrne` becomes `client:C-1042`). Two matching clients get a question back ("which one?"). A client outside the caller's teams gets a refusal that does not repeat the name; the audit log keeps that client's reference, so an investigation can see whose data was asked for. The model and the logs only ever see references.
-3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. The mapping lives in memory for the request only.
+3. **Masking.** Emails, phone numbers, IBANs, card numbers and remaining names become numbered placeholders before the decision layer sees the text. An email placeholder keeps one fact, which side of the firm's boundary the address is on: `<FIRM_EMAIL_1>` for the firm's own domains (listed in `config/thresholds.yaml`), `<EXTERNAL_EMAIL_1>` for any other, clients' included. The mapping lives in memory for the request only.
 4. **Decision chain.** Seven typed questions (`config/questions.yaml`), each with written criteria for every answer, go to the first decider that answers in time: a decision model through LiteLLM, then optionally a small LLM, then rules. Every answer is normalised the same way and DERVA computes its confidence itself, so a threshold means the same whichever decider answered. Timeouts and circuit breakers skip a failing link. If every link fails, the gateway holds the request for review: it fails closed.
 5. **Policy.** Thresholds (`config/thresholds.yaml`, versioned) turn the probabilities into one outcome: `block`, `review`, `decline`, `clarify`, `small_model` or `frontier_model`. The worst finding wins. Clearly off-topic requests are declined with a polite reply instead of going to the review queue, which is kept for legitimate work the gateway is unsure about; safety findings still outrank a decline. An unsure router defaults to the frontier tier.
 6. **Delivery.** Blocked, held, declined and clarify outcomes come back as ordinary chat completions carrying a request id, streamed or not, so standard clients and scanners see a refusal, not an error. Allowed requests go to the chosen tier, and callers cannot pick the tier themselves.
@@ -138,6 +138,7 @@ A nightly workflow runs [garak](https://github.com/NVIDIA/garak) against the sam
 | Approval for effectful actions | `policy.evaluate_tool_call`, post-call hook | unit and proxy tests: `send_email` held, `lookup_client` passes |
 | Callers cannot choose the tier or other routes | pre-call hook | tests; non-chat routes return 403 |
 | Off-topic requests declined, not queued for review | `off_topic` question, `policy.evaluate_request` | policy tests (safety still outranks a decline); proxy smoke test |
+| Client data stays inside the firm | `exfiltration` question; firm domains in `thresholds.yaml`; email placeholders labelled inside or outside | golden data-boundary cases; masking and rules tests |
 | Refused client access traceable | `denied_references` in the `resolved` event | pipeline test: reference kept, name absent |
 | Append-only audit log | `sql/audit_schema.sql`, `audit.py` | Postgres tests: the writer role is denied, the owner is stopped by triggers, concurrent writers keep one chain |
 | Tamper and truncation evidence | hash chain + anchors (`anchor.py`) | tests that edit events and cut the tail |
@@ -159,7 +160,7 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## What has been verified
 
-- 110 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
+- 119 tests (plus 8 Postgres tests when a database is available), ruff, and mypy in strict mode, all passing.
 - A fresh environment built from `uv.lock` alone (`uv sync --frozen --all-extras`) passes the same tests.
 - The LiteLLM proxy (1.105.1, pinned) with the DERVA hooks, end to end:
   - every outcome, including streamed refusals and off-topic declines (8 smoke checks)
@@ -174,7 +175,9 @@ The deploy workflow builds the image, runs the schema migration, and deploys a c
 
 ## Known limitations
 
-- **No decision-model results yet.** Jev, Clef-flash and the small LLM still have to be run on the held-out splits.
+- **Decision-model results are partial.** Jev, Clef-flash and Claude Haiku 5.5 have been run on the held-out splits. The golden runs came before questions 2026-10-26.1 changed the exfiltration question, so they must be repeated before an adoption decision (`results/DECISIONS.md`).
+- **Inside or outside the firm is decided by email domain.** The rules decider counts every link as outside, and nothing yet tells a decider that an outside address is the client's own. At the tool-call check that could hold a legitimate email to a client as exfiltration; every send is held for a person anyway. v0.2 can label a client's address from the CRM.
+- **Who may export client data in bulk is not controlled yet.** v0.1 blocks client data leaving the firm and holds every send for a person; bulk exports inside the firm pass the request check. An export permission, granted per caller or per export, belongs with v0.2's signed grants.
 - **The golden and injection seed sets are small and written by the author.** They test the harness and the obvious cases. The public datasets (`--full`) and an independent reviewer's labels would make the results stronger.
 - **v0.1's tool-call control rewrites the model's response.** An agent that holds its own tool credentials could still call a tool directly. v0.2 closes this: tool servers accept only calls carrying a gateway-signed grant for the exact arguments, spent once.
 - **Streamed requests that include tools are refused.** v0.1 checks tool calls only in complete responses.

@@ -38,23 +38,48 @@ INJECTION_PATTERNS = [
     ),
 ]
 
+# Exfiltration turns on where data would go. The masker labels email addresses
+# <FIRM_EMAIL_n> or <EXTERNAL_EMAIL_n>. The rules know no firm domains, so every
+# link, and any address that reaches them unmasked, counts as outside.
+_SEND = r"\b(send|forward|email|e-mail|upload|post|copy|export|transfer|share|save)\b"
+_BULK = r"\b(all|every|entire|full|complete|whole)\b"
+_DATA = r"\b(records?|data|clients?|accounts?|details|list|database|history|statements?|balances?|holdings|portfolios?)\b"
+_OUT_ADDRESS = r"<EXTERNAL_EMAIL_\d+>|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://"
+_OUTSIDE = (
+    _OUT_ADDRESS + r"|www\.|webhook"
+    r"|\b(personal|private|home)\s+(e-?mail|address|account|inbox)"
+    r"|\b(gmail|hotmail|yahoo|icloud|protonmail|dropbox|wetransfer|pastebin)\b"
+)
+OUTSIDE_PATTERN = re.compile(_OUTSIDE, _I)
+INSIDE_PATTERN = re.compile(
+    r"<FIRM_EMAIL_\d+>"
+    r"|\b(colleagues?|the team|compliance team|back office|crm|shared drive|sharepoint|intranet)\b",
+    _I,
+)
+BULK_PATTERN = re.compile(f"{_SEND}.{{0,80}}{_BULK}.{{0,40}}{_DATA}", _I)
+
 EXFILTRATION_PATTERNS = [
+    # Records in bulk, with somewhere outside the firm in view.
+    re.compile(f"{_SEND}.{{0,80}}{_BULK}.{{0,40}}{_DATA}.{{0,80}}({_OUTSIDE})", _I),
+    # Data sent to an outside address or link.
     re.compile(
-        r"\b(send|forward|email|upload|post|copy|export|transfer)\b.{0,80}\b(all|every|entire|full|complete)\b.{0,40}\b(records?|data|clients?|accounts?|details|list|database|history)\b",
+        _SEND
+        + r".{0,60}\b(list|records?|data|database|details|history|statements?|balances?|portfolio)\b"
+        + rf".{{0,40}}\b(to|into)\b\s*({_OUT_ADDRESS})",
         _I,
     ),
+    # Anything sent to the user's own personal account.
     re.compile(
-        r"\b(send|forward|email|upload|post|copy|export|transfer)\b.{0,60}\b(list|records?|data|database|details|history|statements?)\b.{0,40}\bto\b\s*(<EMAIL_ADDRESS_\d+>|\S+@\S+|https?://)",
+        r"\b(to|into)\s+(my|his|her|their)\s+(own\s+)?(personal|private|home|gmail|hotmail|yahoo|icloud)\b",
         _I,
     ),
     re.compile(r"\b(send|forward|post|upload)\b.{0,60}(https?://|www\.|webhook)", _I),
-    re.compile(r"\b(bcc|cc)\b.{0,30}<EMAIL_ADDRESS_\d+>", _I),
+    re.compile(r"\b(bcc|cc)\b.{0,30}<EXTERNAL_EMAIL_\d+>", _I),
 ]
 
 ACTION_PATTERNS = {
-    "send_external": re.compile(
-        r"\b(email|e-mail|send|forward|reply|message|notify|text|post)\b", _I
-    ),
+    # A send is internal only when it names somewhere inside and nothing outside.
+    "send": re.compile(r"\b(email|e-mail|send|forward|reply|message|notify|text|post)\b", _I),
     "change_records": re.compile(
         r"\b(update|change|edit|delete|remove|modify|create|add|amend|close)\b", _I
     ),
@@ -110,6 +135,11 @@ EXTERNAL_PATTERN = re.compile(
 )
 
 
+def _inside_only(state: str) -> bool:
+    """Names somewhere inside the firm, and nowhere outside it."""
+    return bool(INSIDE_PATTERN.search(state)) and not OUTSIDE_PATTERN.search(state)
+
+
 def _noul(hit: bool, p_hit: float = 0.9, p_miss: float = 0.1) -> dict[str, float]:
     p = p_hit if hit else p_miss
     return {"yes": p, "no": 1 - p}
@@ -127,11 +157,19 @@ class RulesDecider:
         if q.id == "injection":
             return _noul(any(p.search(state) for p in INJECTION_PATTERNS), 0.95, 0.15)
         if q.id == "exfiltration":
-            return _noul(any(p.search(state) for p in EXFILTRATION_PATTERNS), 0.9, 0.1)
+            if any(p.search(state) for p in EXFILTRATION_PATTERNS):
+                return _noul(True, 0.9)
+            if BULK_PATTERN.search(state) and not _inside_only(state):
+                # Records in bulk with no destination the rules can place: a person decides.
+                return {"yes": 0.5, "no": 0.5}
+            return _noul(False, p_miss=0.1)
         if q.id == "action":
             for action, pattern in ACTION_PATTERNS.items():
                 if pattern.search(state):
-                    return _choice(q.options, action, 0.7)
+                    if action == "send":
+                        action = "send_internal" if _inside_only(state) else "send_external"
+                    if action in q.options:
+                        return _choice(q.options, action, 0.7)
             # Nothing obvious: low confidence on purpose, so a person decides.
             return _choice(q.options, "answer_only", 0.4)
         if q.id == "route":

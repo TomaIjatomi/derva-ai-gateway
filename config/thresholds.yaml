@@ -2,7 +2,7 @@
 # runs (on the tuning split only, never the held-out split) set the real numbers.
 # Every audit event records this version, so any past decision can be replayed
 # against the rules that were live at the time.
-version: "2026-10-19.1"
+version: "2026-10-26.1"
 
 # Noul questions: probability that the statement is true.
 injection:
@@ -43,3 +43,13 @@ tools:
   read_only:
     - lookup_client
     - read_inbox
+
+# The firm's own email domains. The masker labels each address it hides as
+# <FIRM_EMAIL_n> (one of these domains, or a subdomain) or <EXTERNAL_EMAIL_n>
+# (anything else), so the exfiltration question can tell inside from outside
+# without seeing the address. Clients' own addresses are outside the firm.
+# Replace with the firm's real domains; with none listed, every address is
+# treated as outside.
+firm:
+  domains:
+    - firm.example.ie

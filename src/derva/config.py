@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from derva.types import QuestionSet
 
@@ -60,6 +60,22 @@ class ToolPolicy(BaseModel):
         return self
 
 
+class FirmBoundary(BaseModel):
+    """The firm's own email domains: an address on one of them, or on a subdomain,
+    is inside the firm. Every other address is outside it."""
+
+    domains: list[str] = Field(default_factory=list)
+
+    @field_validator("domains")
+    @classmethod
+    def _plain_domains(cls, domains: list[str]) -> list[str]:
+        cleaned = [d.strip().lower().lstrip(".").rstrip(".") for d in domains]
+        bad = [d for d in cleaned if not d or "@" in d or "/" in d or "." not in d]
+        if bad:
+            raise ValueError(f"firm domains must be plain domain names such as firm.ie: {bad}")
+        return cleaned
+
+
 class Thresholds(BaseModel):
     version: str
     injection: NoulThreshold
@@ -69,6 +85,7 @@ class Thresholds(BaseModel):
     route: RouteThreshold
     off_topic: OffTopicThreshold
     tools: ToolPolicy
+    firm: FirmBoundary = Field(default_factory=FirmBoundary)
 
 
 def load_questions(path: Path | None = None) -> QuestionSet:
