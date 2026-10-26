@@ -29,6 +29,7 @@ Register in the LiteLLM config:
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from typing import Any
 
@@ -188,4 +189,17 @@ class DervaGuard(CustomLogger):
         return response if changed else None
 
 
+def warm_start(guard: DervaGuard) -> None:
+    """Build the pipeline and mask one sample now, while the proxy starts.
+
+    Loading spaCy's large model takes tens of seconds. Without this, the first
+    request waits for it (long enough to time out a client), and the health
+    check reports the gateway ready before it is.
+    """
+    guard.pipeline.masker.mask("Warm-up note for Jane Doe, jane.doe@example.com")
+
+
 proxy_handler_instance = DervaGuard()
+# The image sets DERVA_WARM_START; tests and other importers keep the import cheap.
+if os.environ.get("DERVA_WARM_START", "").lower() in {"1", "true", "yes"}:
+    warm_start(proxy_handler_instance)

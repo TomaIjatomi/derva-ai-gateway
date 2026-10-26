@@ -222,3 +222,24 @@ async def test_litellm_decision_decider_reports_provider_errors() -> None:
     )
     with pytest.raises(DeciderError, match="request failed"):
         await decider.decide("hello", load_questions())
+
+
+def test_importing_the_hook_does_not_build_the_pipeline() -> None:
+    from derva.gateway import litellm_hook
+
+    assert litellm_hook.proxy_handler_instance._pipeline is None
+
+
+def test_warm_start_builds_the_pipeline_and_masks_a_sample(guard: DervaGuard) -> None:
+    from derva.gateway.litellm_hook import warm_start
+
+    seen: list[str] = []
+    real_mask = guard.pipeline.masker.mask
+
+    def spy(text: str) -> Any:
+        seen.append(text)
+        return real_mask(text)
+
+    guard.pipeline.masker.mask = spy  # type: ignore[method-assign]
+    warm_start(guard)
+    assert seen and "@" in seen[0]  # an email, so Presidio's email check is primed too
