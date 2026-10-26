@@ -45,9 +45,14 @@ jobs:
         run: make gate
       - name: Harness check through LiteLLM and the mock decider
         run: |
-          uv run derva mock-server &
+          # Started from the venv and stopped at the end: a `uv run` left running
+          # keeps uv's cache locked, and setup-uv's cache clean-up after the job
+          # then waits five minutes for the lock and fails the job.
+          .venv/bin/derva mock-server &
+          mock=$!
           for i in $(seq 1 30); do curl -sf localhost:8100/health && break; sleep 1; done
           uv run derva eval run golden --decider mock --split all --limit 10
+          kill "$mock"
 
   terraform:
     runs-on: ubuntu-latest
