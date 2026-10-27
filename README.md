@@ -140,9 +140,10 @@ Jev is the decision model: the only decider inside the 500 ms budget, and the on
 | Banking77 calibration error (ECE) | 0.01 | 0.07 | 0.06 | 0.10 |
 | p95 latency, golden | 7 ms | **340 ms** | 1,103 ms | 2,169 ms |
 | Cost per 1,000 requests, golden | $0 | $0.05 | $0.10 | $0.24 |
+| Errors, all three tasks | 0 | 0 | 1 timeout | 1 invented label |
 | Adoption criteria | baseline | **all 15 pass** | fails latency on every task, golden holds and accuracy, injection recall | fails latency on every task, golden holds |
 
-Clef-flash is the most accurate on Banking77's 77-way question but too slow for the request path, and it holds half the good gateway requests. Haiku matches Jev's golden accuracy within the noise (difference −0.06 to +0.12, 95% bootstrap) at six times the latency and five times the cost. Golden ran under questions 2026-10-26.1; injection and Banking77 under 2026-10-19.2, whose questions for those tasks are the same.
+Clef-flash is the most accurate on Banking77's 77-way question but too slow for the request path, and it holds half the good gateway requests. Haiku matches Jev's golden accuracy within the noise (difference −0.06 to +0.12, 95% bootstrap) at six times the latency and five times the cost. Haiku's one error was an invented answer: asked which of Banking77's 77 intents "I can't use my card." expresses, it replied `getting_physical_card`, which is not a label (the right answer was `card_not_working`). DERVA rejects any answer outside a question's options, so in the gateway an invented answer never becomes a decision; the next decider in the chain answers instead. Golden ran under questions 2026-10-26.1; injection and Banking77 under 2026-10-19.2, whose questions for those tasks are the same.
 
 ### Red teaming
 
