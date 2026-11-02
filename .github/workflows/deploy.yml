@@ -68,7 +68,7 @@ jobs:
           id_token_audience: ${{ vars.CLOUD_RUN_SERVICE }}
           id_token_include_email: true
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
 
       - name: Smoke test the canary
         run: |

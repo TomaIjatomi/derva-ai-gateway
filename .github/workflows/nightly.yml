@@ -28,7 +28,7 @@ jobs:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Install the gateway from uv.lock
         run: uv sync --frozen --extra gateway
       - name: Scan with the gateway off, then on
@@ -96,7 +96,7 @@ jobs:
               esac ;;
           esac
           [ -n "$key" ] && echo "run=true" >> "$GITHUB_OUTPUT" || echo "No key for ${{ matrix.decider }}; skipping."
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         if: steps.keys.outputs.run == 'true'
       - name: Run held-out evaluations
         if: steps.keys.outputs.run == 'true'
